@@ -5,14 +5,14 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-**T22 — Scoring v1**
-Objective: a bounded, inspectable attention score (noisy-OR over phenomenon groups → band).
+**T24 — Publisher: monotonic per-instrument sequence**
+Objective: assign `published_seq` under a per-instrument row lock and seal the record (INV-6).
 
 ## Completed
 
-T1–T21 (Phase 0–3: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist CRUD,
+T1–T23 (Phase 0–3: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist CRUD,
 job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor, dedupe
-keys, the eight detectors).
+keys, the eight detectors, Scoring v1, ChangeAssembler v1).
 
 ## Implementation decisions already made (do not re-derive)
 
@@ -29,33 +29,51 @@ keys, the eight detectors).
   Decimal/number in `SignalEvidence.evidence`.
 - **DB-backed tests** follow the existing `describeWithDb` pattern (`process.env.DATABASE_URL ?
   describe : describe.skip`) — see known blocker below.
+- **Scoring v1 ramp constants (T22):** §G only spells out ramps for signals 1 and 5; the other six
+  were designed to match that pattern (threshold → 0, threshold+headroom → 1) rather than being
+  quoted from the architecture doc. See `worker/src/assembly/scoringV1.ts::signalStrength` for the
+  exact per-signal headrooms (e.g. `LARGE_ABSOLUTE_MOVE`/`SIGNIFICANT_GAP` saturate at 2× their
+  emission threshold; `RANGE_BREAKOUT` ramps on extension past the 20-session range as a fraction
+  of that range; `EARNINGS_RELEASED` is always strength 1; `CORPORATE_ACTION_APPLIED` is 1 if
+  `is_supported`, else 0 (suppressed, not guessed)). Revisit only with a deliberate calibration
+  change, not silently while doing T23+.
 
-## Files/contracts for T22 (Scoring v1)
+- **ChangeAssembler v1 (T23) shape:** `assembleSignals(existingRecords, newSignals)` in
+  `worker/src/assembly/assembler.ts` is a pure function — no DB access. `ChangeRecordDraft` (worker-
+  internal, not a `packages/contracts` DTO) mirrors the `change_records` columns needed for grouping:
+  `id` (null until persisted), `publishedSeq` (null until sealed), `assemblyVersion`, `sessionDate`,
+  `latestAt`, `signals`. A record is a valid group target only if `publishedSeq === null` AND
+  (`signal.sessionDate === record.sessionDate` OR within 6h of `record.latestAt`); otherwise a new
+  draft opens. Persisting drafts / diffing against DB rows is not yet wired — that lands with the
+  Publisher (T24) or a dedicated persistence step, since T23 only had to prove grouping+sealing logic.
 
-- Create: `worker/src/assembly/scoringV1.ts`
-- Test: `worker/test/scoring.test.ts`
-- Read first: `worker/src/signals/detectors.ts` (`SignalEvidence`, `SignalType` outputs),
-  `packages/contracts/src/enums.ts` (`PhenomenonGroup`, `AttentionBand`)
-- Architecture reference (already extracted, no need to re-read the whole doc): §G "Phenomenon
-  grouping" and "Attention score" in `docs/architecture/initial-architecture.md` — groups
-  `PRICE_MOVE` (signals 1–4, max), `PARTICIPATION` (5–6, max), `EVENT` (7–8, max); weights
-  `w_PRICE_MOVE=0.70, w_PARTICIPATION=0.45, w_EVENT=0.60`; `score = 1 − Π(1 − w_g × strength_g)`;
-  bands `≥0.75 URGENT | ≥0.50 NOTABLE | ≥0.25 MINOR | else QUIET`; per-signal strength ramps, e.g.
-  signal 1 `clamp((multiple−2.0)/2.0, 0, 1)`, signal 5 `clamp((ratio−2.5)/3.5, 0, 1)` (see §G for
-  the rest). Module header must state weights are calibration assumptions, not financial truth.
-- Plan section: `docs/plans/implementation-plan.md` T22 (search `#### T22`).
+## Files/contracts for T24 (Publisher — monotonic per-instrument sequence)
 
-## Verification for T22
+- Create: `worker/src/assembly/publisher.ts`
+- Test: `worker/test/publisher.test.ts`
+- Read first: `worker/src/assembly/assembler.ts` (`ChangeRecordDraft` shape from T23), `worker/src/db.ts`
+  for the `PoolClient`/transaction pattern already used in `persist/bars.ts` and `persist/marketState.ts`.
+- Plan section: `docs/plans/implementation-plan.md` T24 (search `#### T24`). Behavior: one transaction —
+  `SELECT instruments ... FOR UPDATE`, allocate `last_published_seq + 1`, update the instrument, stamp
+  the record with `published_seq`/`published_at`. A record already carrying a `published_seq` is never
+  re-stamped (no-op). This is DB-backed (row locking + concurrency test), so it hits the known blocker
+  below for the `published_seq_is_monotonically_ordered_per_instrument` concurrency test.
+
+## Verification for T24
 
 ```bash
 cd worker
 npx tsc --noEmit
-npx vitest run test/scoring.test.ts
+npx vitest run test/publisher.test.ts
 ```
 
 ## Last completed task
 
-T21 — The eight detectors. Commit: `d9ae7731c8809d894d388e397cf5642c2b597181`.
+T23 — ChangeAssembler v1 with sealing. Not yet committed (worktree has
+`worker/src/assembly/assembler.ts` and `worker/test/assembler.test.ts` untracked, plus T22's
+`worker/src/assembly/scoringV1.ts` / `worker/test/scoring.test.ts` still untracked from the prior
+handoff — all four should be committed together). `npx tsc --noEmit` and
+`npx vitest run test/assembler.test.ts` (4/4) pass in this environment.
 
 ## Known blocker
 
