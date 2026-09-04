@@ -5,17 +5,17 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-**T27 — DiffEngine: since-last-check**
-Objective: implement architecture §F.5 exactly in `api/src/diff/engine.ts` — adjustment first
-(via T26's `factorBetween`), suppression short-circuit on `hasUnsupportedAction`, then adjusted
-baseline, absolute/percentage change, elapsed time, sessions elapsed (via T18's calendar),
-volatility multiple, unseen-change list, and propagated (never recomputed) freshness. Emits
-`comparison_status ∈ { OK, SUPPRESSED_CORPORATE_ACTION, AWAITING_BASELINE, INSUFFICIENT_HISTORY }`.
-Depends on T26, T18, T16.
+**T28 — Ack token mint and verify**
+Objective: `api/src/checkpoints/ackToken.ts` — `mint(payload)` produces a base64url payload +
+HMAC-SHA256 signature (`ACK_TOKEN_SECRET`); `verify(token, sessionUserId, pathInstrumentId)`
+checks signature (constant-time compare), scope, and expiry (15 min). Payload: `v`, `user_id`,
+`instrument_id`, `served_watermark`, `baseline_price`, `baseline_market_timestamp`,
+`corporate_action_version`, `issued_at`, `expires_at`. **No token table, no revocation list, no
+cleanup job** (INV-7) — assert no table is created or read. Depends on T8.
 
 ## Completed
 
-T1–T26 (Phase 0–5 start: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
+T1–T27 (Phase 0–5: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
 CRUD, job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor,
 dedupe keys, the eight detectors, Scoring v1, ChangeAssembler v1, Publisher, shared template
 explanation, AdjustmentPolicy read side).
@@ -87,22 +87,46 @@ explanation, AdjustmentPolicy read side).
   `api/test/adjustment.test.ts` for the pattern. `describeWithDb` must gate on **both** env vars
   being set when a test needs this split.
 
-## Files/contracts for T27 (DiffEngine — since-last-check)
+- **DiffEngine (T27) shape:** `computeSinceLastCheck(input)` in `api/src/diff/engine.ts` is a
+  **pure function** — like T23's `assembleSignals`, it does no DB access itself. It takes an
+  already-computed `AdjustmentResult` (T26's `factorBetween`, run by the caller beforehand), an
+  already-bounded `unseenChanges` list (the caller's own query, `published_seq > seen_through`),
+  and a `holidays` set (the caller's own query against `exchange_holidays`). This is deliberate:
+  T31's inbox route must run this per watchlist item while staying at exactly two total queries, so
+  the engine itself must not issue any I/O — batched fetching is the caller's concern (T30 for a
+  single instrument, T31 for a bounded list). Order of checks mirrors §F.5's pseudocode:
+  `AWAITING_BASELINE` (no baseline price/timestamp) short-circuits before `SUPPRESSED_CORPORATE_ACTION`
+  (`adjustment.hasUnsupportedAction`), before the real arithmetic. `comparison_status` has a fourth
+  value not spelled out in the §F.5 pseudocode text, `INSUFFICIENT_HISTORY` — used when
+  `current.sigma20` is `null` (FeatureExtractor's own `bars_available < 20` gate, T19). This is a
+  **judgment call, not an architecture quote**: `INSUFFICIENT_HISTORY` only omits
+  `volatilityMultiple` — `absoluteChange`/`percentageChange`/`adjustedBaseline` are still returned,
+  since the raw price comparison doesn't need a volatility baseline to be meaningful. Revisit only
+  with a deliberate decision, not silently while wiring T30/T31. A zero `sigma20` or a
+  `sessionsElapsed` of `0` also omits `volatilityMultiple` (divide-by-zero guard, same pattern as
+  the worker's zero-variance detector guard) without changing `comparisonStatus` away from `OK`.
+- **`exchange_holidays` grants gap (found and fixed while building T27):** `db/migrations/
+  0003_exchange_calendar.sql` created the table before `0002_roles.sql`'s roles existed to grant
+  against it, so neither role could `SELECT` from it. Added `db/migrations/
+  0004_exchange_holidays_grants.sql` granting `SELECT` to both `stockwatch_api` and
+  `stockwatch_worker` — it's a shared reference table (T18: "one calendar implementation, imported
+  by both processes"), not user- or market-observation data, so this doesn't cross INV-2/INV-3.
 
-- Create: `api/src/diff/engine.ts`
-- Test: `api/test/diff.engine.test.ts`
-- Read first: `api/src/diff/adjustment.ts` (T26 — call `factorBetween` first, per §F.5),
-  `packages/contracts/src/calendar.ts` (T18 — session-counting for `sessions_elapsed`),
-  `api/src/market/envelope.ts` (T16 — where `data_freshness` already lives; propagate, don't
-  recompute).
-- Plan section: `docs/plans/implementation-plan.md` T27 (search `#### T27`).
+## Files/contracts for T28 (Ack token mint and verify)
 
-## Verification for T27
+- Create: `api/src/checkpoints/ackToken.ts`
+- Test: `api/test/ackToken.test.ts`
+- Read first: `api/src/auth/password.ts` or `session.ts` for this codebase's crypto/env-secret
+  conventions (`ACK_TOKEN_SECRET` is new — check `api/src/config.ts` for how existing secrets are
+  parsed from env).
+- Plan section: `docs/plans/implementation-plan.md` T28 (search `#### T28`).
+
+## Verification for T28
 
 ```bash
 cd api
 npx tsc --noEmit
-npx vitest run test/diff.engine.test.ts
+npx vitest run test/ackToken.test.ts
 ```
 
 ## Local Postgres access (env vars now automated via direnv)
@@ -118,12 +142,19 @@ files by default).
 
 ## Last completed task
 
-T26 (AdjustmentPolicy read side). `api/src/diff/adjustment.ts` + `api/test/adjustment.test.ts`
-(4/4). `npx tsc --noEmit` passes (pre-existing unrelated `exactOptionalPropertyTypes`/strict-null
-errors remain in `auth/routes.ts`, `auth/session.ts`, `db.ts`, `watchlists/{repo,resolve,routes}.ts`
-— present on `main` before this task, not introduced by it). Full `api` suite: 95/96 — the one
-failure is the pre-existing documented `auth.session.test.ts` transactional-client isolation bug
-below, unrelated to T26.
+T27 (DiffEngine — since-last-check). `api/src/diff/engine.ts` + `api/test/diff.engine.test.ts`
+(14/14, pure-function tests, no DB). `npx tsc --noEmit` passes (same pre-existing unrelated
+strict-null errors as before, not introduced by this task). Full `api` suite: 110/110 clean (after
+truncating stale rows — see "stale rows" note above); full `worker` suite: 82/82 clean, run
+separately from the `api` suite on a freshly truncated DB (running both suites back-to-back
+without truncating between them causes spurious `worker/test/jobs.queue.test.ts` failures from
+leftover `jobs` rows/sequence state seeded by the `api` suite's watchlist/tracking tests sharing
+the same physical database — not a code regression, just uncoordinated shared fixtures across the
+two packages' test runs).
+
+Also fixed in this pass: the previously-documented `auth.session.test.ts` requireSession
+transactional-isolation bug (see "Fixed test-isolation bug" note above) — full `api` suite is now
+green with no known failing tests.
 
 ## DB environment (resolved — was previously a blocker)
 
