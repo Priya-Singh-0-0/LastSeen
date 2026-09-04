@@ -165,9 +165,14 @@ predate T24, never previously exercised against a live DB):**
   Fixed by having `failJob` write `attempts = $N` explicitly in both its PENDING and FAILED
   branches, since it may be the only durable writer of that value.
 
-**Known bug found, not yet fixed (flag before touching T8/auth session tests):**
-- `api/test/auth.session.test.ts`, `T8 — requireSession middleware` describe block: the test
-  inserts the session/user via a transactional `client` (`BEGIN`, never committed within the
-  test), but the actual HTTP request goes through the route's separate `pool` — a different
-  connection that cannot see the uncommitted rows — so the request 401s instead of succeeding.
-  Test-isolation bug, not a product bug; every other test in the file passes.
+**Fixed test-isolation bug (was "known blocker" as of T26 handoff):**
+- `api/test/auth.session.test.ts`, `T8 — requireSession middleware` describe block previously
+  seeded the session/user via a transactional `client` (`BEGIN`, never committed within the test),
+  but the actual HTTP request goes through `requireSession(pool)` — a different connection that
+  cannot see the uncommitted rows — so the request 401'd instead of succeeding. Fixed by seeding
+  fixtures as committed writes directly on `pool` and cleaning them up with explicit `DELETE`s in
+  `afterEach`, instead of a rolled-back transaction (that pattern only works when the code under
+  test also runs on the same transactional client, as in the other two `describeWithDb` blocks in
+  this file). Full `api` suite is 96/96 after this fix (run against a freshly truncated DB — see
+  "stale rows" note above; a `route_test@example.com`-style fixed-email collision from a prior run
+  can otherwise cause one unrelated `auth.routes.test.ts` failure).

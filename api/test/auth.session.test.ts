@@ -94,8 +94,12 @@ describeWithDb('T8 — session create/lookup/destroy', () => {
 });
 
 describeWithDb('T8 — requireSession middleware', () => {
+  // Unlike the two describe blocks above, this one cannot seed fixtures inside a
+  // BEGIN'd transaction on a dedicated client: the requireSession middleware queries
+  // through `pool` (a separate connection, per createSession/lookupSession's real
+  // call signature), which cannot see the transactional client's uncommitted rows.
+  // Fixtures here are committed directly and cleaned up in afterEach instead.
   let pool: pg.Pool;
-  let client: pg.PoolClient;
   let app: ReturnType<typeof Fastify>;
 
   beforeAll(() => {
@@ -110,9 +114,7 @@ describeWithDb('T8 — requireSession middleware', () => {
   });
 
   beforeEach(async () => {
-    client = await pool.connect();
-    await client.query('BEGIN');
-    await client.query(
+    await pool.query(
       `INSERT INTO users (id, email, password_hash) VALUES (999998, 'mw_test@example.com', 'x')
        ON CONFLICT (id) DO NOTHING`,
     );
@@ -125,8 +127,8 @@ describeWithDb('T8 — requireSession middleware', () => {
   });
 
   afterEach(async () => {
-    await client.query('ROLLBACK');
-    client.release();
+    await pool.query(`DELETE FROM sessions WHERE user_id = 999998`);
+    await pool.query(`DELETE FROM users WHERE id = 999998`);
     await app.close();
   });
 
@@ -144,7 +146,7 @@ describeWithDb('T8 — requireSession middleware', () => {
   });
 
   it('accepts request with valid cookie and populates request.user from session — not from body', async () => {
-    const { token } = await createSession(client, 999998n);
+    const { token } = await createSession(pool, 999998n);
     const res = await app.inject({
       method: 'GET',
       url: '/protected',
