@@ -2,7 +2,7 @@ import pg from 'pg';
 
 // ─── NUMERIC-as-string type parser (INV-9) ────────────────────────────────────
 // Mirrors api/src/db.ts — both processes must return NUMERIC as string.
-pg.types.setTypeParser(1700 as pg.TypeId, (value: string) => value);
+pg.types.setTypeParser(1700 as any, (value: string) => value);
 
 export type { Pool, PoolClient } from 'pg';
 

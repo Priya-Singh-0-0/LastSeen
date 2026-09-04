@@ -44,7 +44,7 @@ export async function claimJob(client: PoolClient): Promise<JobRow | null> {
   );
 
   if (rows.length === 0) return null;
-  const row = rows[0];
+  const row = rows[0]!;
 
   await query(
     client,

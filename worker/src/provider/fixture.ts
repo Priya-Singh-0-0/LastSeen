@@ -48,23 +48,26 @@ export class FixtureAdapter implements ProviderAdapter {
       const price = parseDecimal(String(raw.price));
       if (!price.isPositive()) continue;
 
-      results.push({
+      const obs: Record<string, unknown> = {
         instrumentId: String(raw.instrumentId ?? '0'),
         symbol,
         price,
         currency: String(raw.currency ?? 'USD'),
-        marketTimestamp: Number(raw.marketTimestamp) as UtcTimestamp,
-        ingestedAt: Number(raw.ingestedAt) as UtcTimestamp,
+        marketTimestamp: Number(raw.marketTimestamp),
+        ingestedAt: Number(raw.ingestedAt),
         source: String(raw.source ?? 'fixture'),
-        marketStatus: raw.marketStatus as MarketStatus,
-        valueKind: raw.valueKind as ValueKind,
-        dataFreshness: raw.dataFreshness as DataFreshness,
-        volume: raw.volume !== undefined ? parseDecimal(String(raw.volume)) : undefined,
-        open: raw.open !== undefined ? parseDecimal(String(raw.open)) : undefined,
-        high: raw.high !== undefined ? parseDecimal(String(raw.high)) : undefined,
-        low: raw.low !== undefined ? parseDecimal(String(raw.low)) : undefined,
-        prevClose: raw.prevClose !== undefined ? parseDecimal(String(raw.prevClose)) : undefined,
-      });
+        marketStatus: raw.marketStatus,
+        valueKind: raw.valueKind,
+        dataFreshness: raw.dataFreshness,
+      };
+
+      if (raw.volume !== undefined) obs.volume = parseDecimal(String(raw.volume));
+      if (raw.open !== undefined) obs.open = parseDecimal(String(raw.open));
+      if (raw.high !== undefined) obs.high = parseDecimal(String(raw.high));
+      if (raw.low !== undefined) obs.low = parseDecimal(String(raw.low));
+      if (raw.prevClose !== undefined) obs.prevClose = parseDecimal(String(raw.prevClose));
+
+      results.push(obs as unknown as Observation);
     }
 
     return results;
