@@ -1,10 +1,20 @@
 # Stockwatch — Implementation Plan
 
-> **Status:** Awaiting approval (rev. 2 — TypeScript worker on the official Alpaca Node SDK).
-> Do not begin implementation until the plan is accepted.
-> **For executors:** read `CLAUDE.md`, then `docs/architecture/initial-architecture.md`, then this
-> file. Use `superpowers:subagent-driven-development` (recommended) or
-> `superpowers:executing-plans`. Steps use `- [ ]` checkboxes for tracking.
+> **Status:** Accepted; implementation in progress (rev. 2 — TypeScript worker on the official
+> Alpaca Node SDK).
+> **For executors resuming work:** read `CLAUDE.md`, then `docs/plans/current-state.md` (task
+> handoff — current task, decisions, exact files), then only the current task's section below.
+> Read `docs/architecture/initial-architecture.md` in full only when the current task changes an
+> architectural boundary, the plan explicitly points to a section, or there's an ambiguity/conflict
+> — not to look up constants or contracts that `current-state.md` should already reference.
+
+## Progress
+
+| Range | Status |
+|---|---|
+| T1–T21 | Done |
+| T22 | Next — see `docs/plans/current-state.md` |
+| T23–T37 | Pending |
 
 ---
 

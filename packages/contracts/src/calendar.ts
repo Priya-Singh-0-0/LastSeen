@@ -18,7 +18,10 @@ export function getEasternSessionDate(ts: UtcTimestamp): SessionDate {
 }
 
 function getUtcNoonForDate(isoDate: string): number {
-  const [y, m, d] = isoDate.split('-').map(Number);
+  const parts = isoDate.split('-').map(Number);
+  const y = parts[0]!;
+  const m = parts[1]!;
+  const d = parts[2]!;
   return Date.UTC(y, m - 1, d, 12, 0, 0);
 }
 

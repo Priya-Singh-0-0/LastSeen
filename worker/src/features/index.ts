@@ -29,7 +29,7 @@ export function extractFeatures(current: Observation, history: DailyBar[]): Feat
   }
 
   // 1. Resolve current day fields and prevClose
-  const prevClose = current.prevClose ?? history[0].close;
+  const prevClose = current.prevClose ?? history[0]!.close;
   const currentPrice = current.price;
   const currentHigh = current.high ?? currentPrice;
   const currentLow = current.low ?? currentPrice;
@@ -48,21 +48,22 @@ export function extractFeatures(current: Observation, history: DailyBar[]): Feat
   const true_range = maxHighPrev.minus(minLowPrev);
 
   // 5. high20 / low20 over the past 20 sessions (not including today)
-  let high20 = history[0].high;
-  let low20 = history[0].low;
+  let high20 = history[0]!.high;
+  let low20 = history[0]!.low;
   for (let i = 1; i < 20; i++) {
-    if (history[i].high.greaterThan(high20)) {
-      high20 = history[i].high;
+    const bar = history[i]!;
+    if (bar.high.greaterThan(high20)) {
+      high20 = bar.high;
     }
-    if (history[i].low.lessThan(low20)) {
-      low20 = history[i].low;
+    if (bar.low.lessThan(low20)) {
+      low20 = bar.low;
     }
   }
 
   // 6. volume_median20 over the past 20 sessions (not including today)
   const volumes20 = history.slice(0, 20).map(b => b.volume).sort((a, b) => a.cmp(b));
   // 20 items, so median is average of index 9 and 10
-  const volume_median20 = volumes20[9].plus(volumes20[10]).dividedBy(2);
+  const volume_median20 = volumes20[9]!.plus(volumes20[10]!).dividedBy(2);
 
   // 7. volume_ratio
   let volume_ratio: Decimal;
@@ -78,9 +79,9 @@ export function extractFeatures(current: Observation, history: DailyBar[]): Feat
   // ...
   // r_19 = ln(history[18].close / history[19].close)
   const logReturns: Decimal[] = [];
-  logReturns.push(Decimal.ln(currentPrice.dividedBy(history[0].close)));
+  logReturns.push(Decimal.ln(currentPrice.dividedBy(history[0]!.close)));
   for (let i = 0; i < 19; i++) {
-    logReturns.push(Decimal.ln(history[i].close.dividedBy(history[i+1].close)));
+    logReturns.push(Decimal.ln(history[i]!.close.dividedBy(history[i + 1]!.close)));
   }
 
   // Mean of log returns

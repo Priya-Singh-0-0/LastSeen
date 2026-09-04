@@ -68,3 +68,28 @@ export interface DailyBar {
   readonly close: Decimal;
   readonly volume: Decimal;
 }
+
+/**
+ * Provider-neutral market event (e.g. earnings release). Mirrors `market_events`.
+ */
+export interface MarketEvent {
+  readonly instrumentId: string;
+  readonly eventType: string;
+  readonly eventTimestamp: UtcTimestamp;
+  readonly fiscalPeriod?: string;
+  readonly providerEventId?: string;
+  readonly source: string;
+}
+
+/**
+ * Provider-neutral corporate action (e.g. split). Mirrors `corporate_actions`.
+ */
+export interface CorporateAction {
+  readonly instrumentId: string;
+  readonly actionType: string;
+  readonly effectiveDate: SessionDate;
+  readonly adjustmentFactor?: Decimal;
+  readonly isSupported: boolean;
+  readonly versionSeq: number;
+  readonly source: string;
+}
