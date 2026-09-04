@@ -55,8 +55,7 @@ npx vitest run test/scoring.test.ts
 
 ## Last completed task
 
-T21 — The eight detectors. Commit: (this session, see `git log -1` after commit — update this line
-post-commit).
+T21 — The eight detectors. Commit: `d9ae7731c8809d894d388e397cf5642c2b597181`.
 
 ## Known blocker
 
