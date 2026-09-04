@@ -1,0 +1,12 @@
+{
+  "symbol": "BRKB",
+  "_malformed": true,
+  "price": null,
+  "currency": "USD",
+  "marketTimestamp": 1722960000000,
+  "ingestedAt": 1722960100000,
+  "source": "fixture",
+  "marketStatus": "OPEN",
+  "valueKind": "LIVE",
+  "dataFreshness": "FRESH"
+}

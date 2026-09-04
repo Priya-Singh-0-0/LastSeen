@@ -1,0 +1,16 @@
+{
+  "symbol": "AAPL",
+  "price": "182.340000",
+  "currency": "USD",
+  "marketTimestamp": 1722960000000,
+  "ingestedAt": 1722960100000,
+  "source": "fixture",
+  "marketStatus": "OPEN",
+  "valueKind": "LIVE",
+  "dataFreshness": "FRESH",
+  "volume": "5234100",
+  "open": "181.500000",
+  "high": "183.100000",
+  "low": "181.200000",
+  "prevClose": "180.920000"
+}

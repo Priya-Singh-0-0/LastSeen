@@ -1,0 +1,12 @@
+{
+  "symbol": "TSLA",
+  "_futureDated": true,
+  "price": "240.500000",
+  "currency": "USD",
+  "marketTimestamp": 9999999999999,
+  "ingestedAt": 1722960100000,
+  "source": "fixture",
+  "marketStatus": "OPEN",
+  "valueKind": "LIVE",
+  "dataFreshness": "FRESH"
+}
