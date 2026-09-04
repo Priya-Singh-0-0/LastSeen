@@ -54,9 +54,9 @@ GRANT SELECT, INSERT ON instrument_symbols  TO stockwatch_api;
 -- Column-level grant: all columns except last_ingested_at
 GRANT SELECT ON instrument_tracking TO stockwatch_api;
 GRANT INSERT (instrument_id, tracking_state, follower_count, priority, updated_at)
-  TO stockwatch_api;
+  ON instrument_tracking TO stockwatch_api;
 GRANT UPDATE (tracking_state, follower_count, priority, updated_at)
-  TO stockwatch_api;
+  ON instrument_tracking TO stockwatch_api;
 -- Deliberately NO grant on last_ingested_at for stockwatch_api
 
 -- Jobs: INSERT only (enqueue), SELECT for status reads
@@ -81,8 +81,7 @@ GRANT SELECT ON change_records           TO stockwatch_api;
 
 GRANT USAGE ON SCHEMA public TO stockwatch_worker;
 
--- Sequences the worker needs
-GRANT USAGE, SELECT ON SEQUENCE instrument_market_state_id_seq  TO stockwatch_worker;
+-- Sequences the worker needs (instrument_market_state has no serial id — its PK is instrument_id)
 GRANT USAGE, SELECT ON SEQUENCE instrument_bars_id_seq          TO stockwatch_worker;
 GRANT USAGE, SELECT ON SEQUENCE market_events_id_seq            TO stockwatch_worker;
 GRANT USAGE, SELECT ON SEQUENCE corporate_actions_id_seq        TO stockwatch_worker;

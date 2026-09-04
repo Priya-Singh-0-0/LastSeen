@@ -12,6 +12,9 @@ import { SignalType, AttentionBand, PhenomenonGroup, type SignalEvidence } from 
  */
 export const SCORING_VERSION = 1;
 
+/** Scoring only ever reads signalType/evidence — never dedupe/timestamp/version metadata. */
+export type ScorableSignal = Pick<SignalEvidence, 'signalType' | 'evidence'>;
+
 const GROUP_WEIGHTS: Record<PhenomenonGroup, number> = {
   [PhenomenonGroup.PRICE_MOVE]: 0.7,
   [PhenomenonGroup.PARTICIPATION]: 0.45,
@@ -38,7 +41,7 @@ function ramp(value: number, threshold: number, headroom: number): number {
 }
 
 /** Strength in [0,1] via a saturating ramp on the signal's own headroom above its emission threshold. */
-function signalStrength(signal: SignalEvidence): number {
+export function signalStrength(signal: ScorableSignal): number {
   switch (signal.signalType) {
     case SignalType.VOLATILITY_ADJUSTED_MOVE:
       return ramp(Number(signal.evidence.multiple), 2.0, 2.0);
@@ -78,7 +81,7 @@ export interface GroupScore {
   readonly group: PhenomenonGroup;
   readonly weight: number;
   readonly strength: number;
-  readonly memberSignals: readonly SignalEvidence[];
+  readonly memberSignals: readonly ScorableSignal[];
 }
 
 export interface AttentionScoreResult {
@@ -89,8 +92,8 @@ export interface AttentionScoreResult {
 
 const ALL_GROUPS = [PhenomenonGroup.PRICE_MOVE, PhenomenonGroup.PARTICIPATION, PhenomenonGroup.EVENT] as const;
 
-export function scoreSignals(signals: readonly SignalEvidence[]): AttentionScoreResult {
-  const byGroup = new Map<PhenomenonGroup, SignalEvidence[]>();
+export function scoreSignals(signals: readonly ScorableSignal[]): AttentionScoreResult {
+  const byGroup = new Map<PhenomenonGroup, ScorableSignal[]>();
   for (const group of ALL_GROUPS) byGroup.set(group, []);
   for (const signal of signals) byGroup.get(SIGNAL_GROUP[signal.signalType])!.push(signal);
 

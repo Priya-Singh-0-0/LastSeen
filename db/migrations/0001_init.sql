@@ -278,9 +278,11 @@ CREATE TABLE change_records (
   renderer_version    INT,
   created_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
-  -- published records have unique seq per instrument (INV-6)
+  -- published records have unique seq per instrument (INV-6). Default NULLS DISTINCT
+  -- behavior is required here: multiple unpublished (NULL) drafts may coexist per
+  -- instrument before the Publisher seals them one at a time.
   CONSTRAINT change_records_published_seq_unique
-    UNIQUE NULLS NOT DISTINCT (instrument_id, published_seq)
+    UNIQUE (instrument_id, published_seq)
     DEFERRABLE INITIALLY DEFERRED
 );
 

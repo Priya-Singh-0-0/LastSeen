@@ -79,6 +79,10 @@ export async function completeJob(client: PoolClient, jobId: string): Promise<vo
  * Mark a job as failed.
  * If attempts < max_attempts the job is reset to PENDING with exponential backoff;
  * otherwise it is set to FAILED permanently.
+ *
+ * `attempts` is written here (not just used for backoff math): the caller may be
+ * running in a fresh transaction after rolling back the one that incremented it in
+ * `claimJob`, so this is the only durable write of the current attempt count.
  */
 export async function failJob(
   client: PoolClient,
@@ -93,17 +97,18 @@ export async function failJob(
       client,
       `UPDATE jobs
        SET status = 'PENDING',
+           attempts = $1,
            lease_expires_at = NULL,
-           scheduled_at = NOW() + ($1 * INTERVAL '1 second'),
+           scheduled_at = NOW() + ($2 * INTERVAL '1 second'),
            updated_at = NOW()
-       WHERE id = $2`,
-      [backoffSeconds, jobId],
+       WHERE id = $3`,
+      [attempts, backoffSeconds, jobId],
     );
   } else {
     await query(
       client,
-      `UPDATE jobs SET status = 'FAILED', updated_at = NOW() WHERE id = $1`,
-      [jobId],
+      `UPDATE jobs SET status = 'FAILED', attempts = $1, updated_at = NOW() WHERE id = $2`,
+      [attempts, jobId],
     );
   }
 }

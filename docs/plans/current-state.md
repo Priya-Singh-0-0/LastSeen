@@ -5,14 +5,18 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-**T24 — Publisher: monotonic per-instrument sequence**
-Objective: assign `published_seq` under a per-instrument row lock and seal the record (INV-6).
+**T26 — AdjustmentPolicy read side (identity case)**
+Objective: `factorBetween(instrument, fromVersion, toVersion)` reads `corporate_actions` in range
+and returns `{ factor, hasUnsupportedAction, actions[] }`; identity case (no actions) returns
+factor `1`. This is the first API-side task (`api/src/diff/adjustment.ts`) — split math itself
+arrives later in T33.
 
 ## Completed
 
-T1–T23 (Phase 0–3: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist CRUD,
+T1–T25 (Phase 0–4: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist CRUD,
 job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor, dedupe
-keys, the eight detectors, Scoring v1, ChangeAssembler v1).
+keys, the eight detectors, Scoring v1, ChangeAssembler v1, Publisher, shared template
+explanation).
 
 ## Implementation decisions already made (do not re-derive)
 
@@ -47,38 +51,96 @@ keys, the eight detectors, Scoring v1, ChangeAssembler v1).
   draft opens. Persisting drafts / diffing against DB rows is not yet wired — that lands with the
   Publisher (T24) or a dedicated persistence step, since T23 only had to prove grouping+sealing logic.
 
-## Files/contracts for T24 (Publisher — monotonic per-instrument sequence)
+- **Shared template explanation (T25) shape:** `renderSharedExplanation(signals)` in
+  `worker/src/explanation/template.ts` picks the dominant `PhenomenonGroup` (via `scoreSignals`,
+  reusing T22's group weights — a group with no member signals is never chosen as dominant), then
+  the highest-`signalStrength` signal within it, then renders that signal's fixed per-`SignalType`
+  template by interpolating its `evidence` fields verbatim (no arithmetic, no unit conversion —
+  e.g. fractions are not turned into "%"). `scoringV1.ts`'s `scoreSignals`/`signalStrength`/
+  `GroupScore` were retyped from `SignalEvidence` to the narrower `ScorableSignal` (`Pick<...,
+  'signalType' | 'evidence'>`) since that's all scoring ever reads — this lets the Publisher build
+  the input straight from `instrument_signals` DB rows without fabricating an unused
+  `dedupeKey`/`marketTimestamp`/`sessionDate`. `publishChangeRecord` (T24) now reads that record's
+  `instrument_signals` rows and stamps `shared_explanation`/`renderer_version` in the same UPDATE
+  that assigns `published_seq` — a record with zero signals gets `NULL`/`NULL`, not a thrown error.
 
-- Create: `worker/src/assembly/publisher.ts`
-- Test: `worker/test/publisher.test.ts`
-- Read first: `worker/src/assembly/assembler.ts` (`ChangeRecordDraft` shape from T23), `worker/src/db.ts`
-  for the `PoolClient`/transaction pattern already used in `persist/bars.ts` and `persist/marketState.ts`.
-- Plan section: `docs/plans/implementation-plan.md` T24 (search `#### T24`). Behavior: one transaction —
-  `SELECT instruments ... FOR UPDATE`, allocate `last_published_seq + 1`, update the instrument, stamp
-  the record with `published_seq`/`published_at`. A record already carrying a `published_seq` is never
-  re-stamped (no-op). This is DB-backed (row locking + concurrency test), so it hits the known blocker
-  below for the `published_seq_is_monotonically_ordered_per_instrument` concurrency test.
+## Files/contracts for T26 (AdjustmentPolicy read side)
 
-## Verification for T24
+- Create: `api/src/diff/adjustment.ts`
+- Test: `api/test/adjustment.test.ts`
+- Plan section: `docs/plans/implementation-plan.md` T26 (search `#### T26`).
+- This is the first API-side task in this handoff sequence — read `api/src/db.ts` (if present) or
+  the existing `api/src/` pattern for pool/query conventions before assuming they match `worker/`'s.
+
+## Verification for T26
 
 ```bash
-cd worker
+cd api
 npx tsc --noEmit
-npx vitest run test/publisher.test.ts
+npx vitest run test/adjustment.test.ts
 ```
+
+## Local Postgres access (env vars now automated via direnv)
+
+`direnv` is installed and hooked into `~/.bashrc` (`eval "$(direnv hook bash)"`). `worker/.envrc`
+and `api/.envrc` (both gitignored) export the correct `DATABASE_URL`/`TEST_DATABASE_URL` for each
+package automatically on `cd` — no more manually re-exporting per shell. This was added because
+the sandbox's global `~/.bashrc` already exports an unrelated `DATABASE_URL` (points at a
+different project's `amr_rag` database) — do not change that global export; the per-directory
+`.envrc` files override it locally instead. If a new shell doesn't pick up the right
+`DATABASE_URL`, run `direnv allow` in `worker/` or `api/` (direnv refuses unreviewed `.envrc`
+files by default).
 
 ## Last completed task
 
-T22 (Scoring v1) and T23 (ChangeAssembler v1 with sealing). Commit: `c1ba98011a43cd9616b603251ea415d4b8f7ea1a`.
-`npx tsc --noEmit` and `npx vitest run test/assembler.test.ts` (4/4) pass in this environment.
+T25 (Shared template explanation). `worker/src/explanation/template.ts` +
+`worker/test/explanation.shared.test.ts`, plus the `publisher.ts` (T24) wiring above.
+`npx tsc --noEmit` passes; full worker suite 82/82 against a real local Postgres instance (see
+"DB environment" below).
 
-## Known blocker
+## DB environment (resolved — was previously a blocker)
 
-Sandbox `DATABASE_URL` env var points to an unrelated Postgres instance (`amr_rag`, not
-stockwatch), and no local Docker daemon is reachable to run `docker-compose.yml`'s `postgres`
-service. DB-backed tests (`bars.test.ts`, `marketState.ordering.test.ts`,
-`enums.consistency.test.ts`, and any future DB-integration test) fail with `ECONNREFUSED` or
-connect to the wrong database in this environment — not a code regression. Non-DB tests
-(`describeWithDb`-gated suites correctly skip only when `DATABASE_URL` is unset entirely) pass.
-To verify DB-touching work, run `docker compose up -d postgres` with a working Docker daemon and
-an unset/correct `DATABASE_URL`, or point `DATABASE_URL` at a real stockwatch instance first.
+A local Postgres 16 is now running natively (not via `docker-compose.yml`; the Docker daemon in
+this sandbox is unreachable). Setup used:
+- DB: `stockwatch`, owned by role `stockwatch` (superuser, password `stockwatch`) — mirrors the
+  docker-compose `POSTGRES_USER`/`POSTGRES_PASSWORD` defaults and is the right role for
+  superuser-ish test setup (creating/dropping rows across all tables) and for running migrations.
+- Migrations applied via `DATABASE_URL=postgres://postgres:5002@localhost:5432/stockwatch npx tsx
+  api/src/migrate.ts` (or any superuser).
+- `worker` test suite: run with `DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch`.
+- `api` test suite needs **two** roles: `DATABASE_URL` set to the `stockwatch_api` role (the
+  app's real runtime role — required for `tracking.test.ts`'s permission-boundary test) and
+  `TEST_DATABASE_URL` set to the `stockwatch` superuser (used by `schema.test.ts`/`grants.test.ts`,
+  which run `runMigrations` themselves and need elevated privilege). Role passwords match role
+  names per `db/migrations/0002_roles.sql` (e.g. `stockwatch_api:stockwatch_api`).
+- Tests leave rows behind on failure (fixed emails/idempotency keys in a few files aren't always
+  timestamped) — a stale row can cause unrelated tests to fail on the next run. If a suite reports
+  unexpected failures, `TRUNCATE users, sessions, watchlists, watchlist_items,
+  user_instrument_checkpoints, instruments, instrument_tracking, jobs RESTART IDENTITY CASCADE;`
+  (as the `stockwatch` superuser) before re-running.
+
+**Bugs found and fixed while first getting these DB-backed tests to actually run (T5/T6/T13 —
+predate T24, never previously exercised against a live DB):**
+- `db/migrations/0002_roles.sql`: two `GRANT INSERT (...)`/`GRANT UPDATE (...)` column-grants on
+  `instrument_tracking` were missing `ON instrument_tracking`, making them invalid statements
+  (parsed as role grants, not table grants) — migrations couldn't apply at all.
+- Same file: a `GRANT ... ON SEQUENCE instrument_market_state_id_seq` referenced a sequence that
+  doesn't exist (`instrument_market_state`'s PK is `instrument_id`, not a `BIGSERIAL id`).
+- `db/migrations/0001_init.sql`: `change_records_published_seq_unique` used
+  `UNIQUE NULLS NOT DISTINCT (instrument_id, published_seq)`, which wrongly forbids more than one
+  *unpublished* (`published_seq IS NULL`) draft per instrument — contradicting the architecture's
+  stated assembler behavior (multiple unpublished drafts may coexist before the Publisher seals
+  them one at a time). Fixed by dropping `NULLS NOT DISTINCT` (default: NULLs are distinct from
+  each other; real `published_seq` values still can't repeat per instrument).
+- `worker/src/jobs/queue.ts`: `drainOne`'s `ROLLBACK` on a handler throw undid `claimJob`'s
+  `attempts = attempts + 1` increment, and `failJob` never re-wrote the `attempts` column in its
+  own (post-rollback) transaction — so `attempts` silently reset to 0 after every failure, forever.
+  Fixed by having `failJob` write `attempts = $N` explicitly in both its PENDING and FAILED
+  branches, since it may be the only durable writer of that value.
+
+**Known bug found, not yet fixed (flag before touching T8/auth session tests):**
+- `api/test/auth.session.test.ts`, `T8 — requireSession middleware` describe block: the test
+  inserts the session/user via a transactional `client` (`BEGIN`, never committed within the
+  test), but the actual HTTP request goes through the route's separate `pool` — a different
+  connection that cannot see the uncommitted rows — so the request 401s instead of succeeding.
+  Test-isolation bug, not a product bug; every other test in the file passes.
