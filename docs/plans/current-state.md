@@ -5,18 +5,20 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-**T26 — AdjustmentPolicy read side (identity case)**
-Objective: `factorBetween(instrument, fromVersion, toVersion)` reads `corporate_actions` in range
-and returns `{ factor, hasUnsupportedAction, actions[] }`; identity case (no actions) returns
-factor `1`. This is the first API-side task (`api/src/diff/adjustment.ts`) — split math itself
-arrives later in T33.
+**T27 — DiffEngine: since-last-check**
+Objective: implement architecture §F.5 exactly in `api/src/diff/engine.ts` — adjustment first
+(via T26's `factorBetween`), suppression short-circuit on `hasUnsupportedAction`, then adjusted
+baseline, absolute/percentage change, elapsed time, sessions elapsed (via T18's calendar),
+volatility multiple, unseen-change list, and propagated (never recomputed) freshness. Emits
+`comparison_status ∈ { OK, SUPPRESSED_CORPORATE_ACTION, AWAITING_BASELINE, INSUFFICIENT_HISTORY }`.
+Depends on T26, T18, T16.
 
 ## Completed
 
-T1–T25 (Phase 0–4: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist CRUD,
-job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor, dedupe
-keys, the eight detectors, Scoring v1, ChangeAssembler v1, Publisher, shared template
-explanation).
+T1–T26 (Phase 0–5 start: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
+CRUD, job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor,
+dedupe keys, the eight detectors, Scoring v1, ChangeAssembler v1, Publisher, shared template
+explanation, AdjustmentPolicy read side).
 
 ## Implementation decisions already made (do not re-derive)
 
@@ -64,20 +66,43 @@ explanation).
   `instrument_signals` rows and stamps `shared_explanation`/`renderer_version` in the same UPDATE
   that assigns `published_seq` — a record with zero signals gets `NULL`/`NULL`, not a thrown error.
 
-## Files/contracts for T26 (AdjustmentPolicy read side)
+- **AdjustmentPolicy read side (T26) shape:** `factorBetween(client, instrumentId, fromVersion,
+  toVersion)` in `api/src/diff/adjustment.ts` reads `corporate_actions` where `version_seq` is in
+  `(fromVersion, toVersion]` (exclusive/inclusive — a row exactly at `fromVersion` is excluded, so
+  `factorBetween(id, v, v)` is always the identity regardless of what's stored at version `v`).
+  Multiplies only `is_supported` actions' `adjustment_factor` into the returned `factor`; an
+  unsupported action in range sets `hasUnsupportedAction: true` but never blocks the multiply of
+  supported ones, and is always the caller's cue to suppress the comparison entirely (that
+  short-circuit is T27's job, not this function's). `effective_date` is cast to `text` in SQL
+  (`effective_date::text`) before being wrapped with `toSessionDate` — avoids relying on
+  `pg`'s default `DATE` → JS `Date` (UTC-midnight) parsing, which is one more implicit conversion
+  than necessary here. Takes `Pool | PoolClient` directly (no repo-wrapper module) since this is a
+  single read query, matching `market/repo.ts`'s style, not `watchlists/repo.ts`'s.
+- **API DB-backed test role split (established by T26, applies to all future API DB tests):** the
+  `stockwatch_api` role is SELECT-only on worker-owned tables (`corporate_actions`,
+  `instrument_signals`, `change_records`, `instrument_market_state`, `instrument_bars`,
+  `market_events` — see T6 grants). Any test needing to *seed* rows in those tables must open a
+  second pool against `TEST_DATABASE_URL` (superuser) for setup/fixture writes, while the function
+  under test still runs against the `DATABASE_URL` (`stockwatch_api`) pool — see
+  `api/test/adjustment.test.ts` for the pattern. `describeWithDb` must gate on **both** env vars
+  being set when a test needs this split.
 
-- Create: `api/src/diff/adjustment.ts`
-- Test: `api/test/adjustment.test.ts`
-- Plan section: `docs/plans/implementation-plan.md` T26 (search `#### T26`).
-- This is the first API-side task in this handoff sequence — read `api/src/db.ts` (if present) or
-  the existing `api/src/` pattern for pool/query conventions before assuming they match `worker/`'s.
+## Files/contracts for T27 (DiffEngine — since-last-check)
 
-## Verification for T26
+- Create: `api/src/diff/engine.ts`
+- Test: `api/test/diff.engine.test.ts`
+- Read first: `api/src/diff/adjustment.ts` (T26 — call `factorBetween` first, per §F.5),
+  `packages/contracts/src/calendar.ts` (T18 — session-counting for `sessions_elapsed`),
+  `api/src/market/envelope.ts` (T16 — where `data_freshness` already lives; propagate, don't
+  recompute).
+- Plan section: `docs/plans/implementation-plan.md` T27 (search `#### T27`).
+
+## Verification for T27
 
 ```bash
 cd api
 npx tsc --noEmit
-npx vitest run test/adjustment.test.ts
+npx vitest run test/diff.engine.test.ts
 ```
 
 ## Local Postgres access (env vars now automated via direnv)
@@ -93,10 +118,12 @@ files by default).
 
 ## Last completed task
 
-T25 (Shared template explanation). `worker/src/explanation/template.ts` +
-`worker/test/explanation.shared.test.ts`, plus the `publisher.ts` (T24) wiring above.
-`npx tsc --noEmit` passes; full worker suite 82/82 against a real local Postgres instance (see
-"DB environment" below).
+T26 (AdjustmentPolicy read side). `api/src/diff/adjustment.ts` + `api/test/adjustment.test.ts`
+(4/4). `npx tsc --noEmit` passes (pre-existing unrelated `exactOptionalPropertyTypes`/strict-null
+errors remain in `auth/routes.ts`, `auth/session.ts`, `db.ts`, `watchlists/{repo,resolve,routes}.ts`
+— present on `main` before this task, not introduced by it). Full `api` suite: 95/96 — the one
+failure is the pre-existing documented `auth.session.test.ts` transactional-client isolation bug
+below, unrelated to T26.
 
 ## DB environment (resolved — was previously a blocker)
 
