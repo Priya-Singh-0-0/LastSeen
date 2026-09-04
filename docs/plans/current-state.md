@@ -69,11 +69,8 @@ npx vitest run test/publisher.test.ts
 
 ## Last completed task
 
-T23 — ChangeAssembler v1 with sealing. Not yet committed (worktree has
-`worker/src/assembly/assembler.ts` and `worker/test/assembler.test.ts` untracked, plus T22's
-`worker/src/assembly/scoringV1.ts` / `worker/test/scoring.test.ts` still untracked from the prior
-handoff — all four should be committed together). `npx tsc --noEmit` and
-`npx vitest run test/assembler.test.ts` (4/4) pass in this environment.
+T22 (Scoring v1) and T23 (ChangeAssembler v1 with sealing). Commit: `c1ba98011a43cd9616b603251ea415d4b8f7ea1a`.
+`npx tsc --noEmit` and `npx vitest run test/assembler.test.ts` (4/4) pass in this environment.
 
 ## Known blocker
 
