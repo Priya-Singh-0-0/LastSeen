@@ -2,7 +2,7 @@ import { SignalType } from '@stockwatch/contracts';
 import type { PoolClient } from '../db.js';
 import { query } from '../db.js';
 import { renderSharedExplanation, RENDERER_VERSION } from '../explanation/template.js';
-import type { ScorableSignal } from './scoringV1.js';
+import { scoreSignals, type ScorableSignal } from './scoringV1.js';
 
 /**
  * Publisher (T24 — INV-6, T25 — INV-14). Assigns `published_seq` to a `change_records`
@@ -71,15 +71,19 @@ export async function publishChangeRecord(
   const signals: ScorableSignal[] = signalRows.map((r) => ({ signalType: r.signal_type, evidence: r.evidence }));
   const sharedExplanation = signals.length > 0 ? renderSharedExplanation(signals) : null;
   const rendererVersion = signals.length > 0 ? RENDERER_VERSION : null;
+  // score/band (architecture §F.3, §G): computed from the same signal set, once, at publish
+  // time — a record with zero signals gets NULL/NULL, matching the shared-explanation pattern.
+  const attention = signals.length > 0 ? scoreSignals(signals) : null;
 
   const { rows: updated } = await query<{ published_seq: string; published_at: Date }>(
     client,
     `UPDATE change_records
      SET published_seq = $1, published_at = NOW(), updated_at = NOW(),
-         shared_explanation = $2, renderer_version = $3
-     WHERE id = $4
+         shared_explanation = $2, renderer_version = $3,
+         score = $4, band = $5
+     WHERE id = $6
      RETURNING published_seq, published_at`,
-    [nextSeq, sharedExplanation, rendererVersion, changeRecordId],
+    [nextSeq, sharedExplanation, rendererVersion, attention?.score ?? null, attention?.band ?? null, changeRecordId],
   );
 
   return {

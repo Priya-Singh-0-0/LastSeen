@@ -199,6 +199,37 @@ describeWithDb('T24 — publisher', () => {
     expect(rows[0].shared_explanation).toBeNull();
   });
 
+  it('stamps score and band from the record signals at publish time (architecture §F.3)', async () => {
+    const recordId = await insertDraft();
+    await client.query(
+      `INSERT INTO instrument_signals (instrument_id, change_record_id, signal_type, detector_version, dedupe_key, evidence, market_timestamp)
+       VALUES ($1, $2, 'LARGE_ABSOLUTE_MOVE', 1, 'k1', $3, NOW())`,
+      [instrumentId, recordId, JSON.stringify({ pct_change: '0.10' })],
+    );
+
+    await publishChangeRecord(client, instrumentId, recordId);
+
+    const { rows } = await client.query<{ score: string | null; band: string | null }>(
+      `SELECT score, band FROM change_records WHERE id = $1`,
+      [recordId],
+    );
+    expect(rows[0].score).not.toBeNull();
+    expect(Number(rows[0].score)).toBeCloseTo(0.7, 5);
+    expect(rows[0].band).toBe('NOTABLE');
+  });
+
+  it('leaves score and band null when the record has no signals', async () => {
+    const recordId = await insertDraft();
+    await publishChangeRecord(client, instrumentId, recordId);
+
+    const { rows } = await client.query<{ score: string | null; band: string | null }>(
+      `SELECT score, band FROM change_records WHERE id = $1`,
+      [recordId],
+    );
+    expect(rows[0].score).toBeNull();
+    expect(rows[0].band).toBeNull();
+  });
+
   it('attempting to publish a sealed record from a fresh call is a no-op', async () => {
     const recordId = await insertDraft();
     await publishChangeRecord(client, instrumentId, recordId);

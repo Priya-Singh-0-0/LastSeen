@@ -1,0 +1,102 @@
+/* T32 baseline styling — dark, card-list grammar inspired by the CoinGecko Android app.
+   Deliberately basic: this is the pre-impeccable pass, refined later via the design skill. */
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-raised: #1c232c;
+  --border: #262c36;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --urgent: #f85149;
+  --notable: #ffa657;
+  --minor: #d4c65a;
+  --quiet: #6e7681;
+  --accent: #58a6ff;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.band-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.band-pill--urgent { background: rgba(248, 81, 73, 0.15); color: var(--urgent); }
+.band-pill--notable { background: rgba(255, 166, 87, 0.15); color: var(--notable); }
+.band-pill--minor { background: rgba(212, 198, 90, 0.15); color: var(--minor); }
+.band-pill--quiet { background: rgba(110, 118, 129, 0.15); color: var(--quiet); }
+.band-pill--none { color: var(--text-muted); }
+
+.envelope-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.envelope-badge__value { font-size: 1.05rem; font-weight: 700; }
+.envelope-badge__currency,
+.envelope-badge__market-status,
+.envelope-badge__value-kind,
+.envelope-badge__freshness {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.envelope-badge--warming { color: var(--text-muted); font-style: italic; }
+
+.inbox {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+}
+.inbox__row {
+  background: var(--surface);
+  padding: 12px 16px;
+  cursor: pointer;
+}
+.inbox__row:hover { background: var(--surface-raised); }
+.inbox__row-main { display: flex; align-items: center; gap: 10px; }
+.inbox__unseen-count {
+  background: var(--accent);
+  color: #04121f;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.inbox__percentage-change { color: var(--text-muted); font-size: 0.8rem; }
+.inbox__explanation { margin: 6px 0 0; color: var(--text-muted); font-size: 0.85rem; }
+.inbox__empty { color: var(--text-muted); padding: 24px; text-align: center; }
+
+.evidence-panel { display: flex; flex-direction: column; gap: 12px; }
+.evidence-panel__record {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.evidence-panel__record-header { display: flex; align-items: center; gap: 8px; }
+.evidence-panel__score { color: var(--text-muted); font-size: 0.8rem; }
+.evidence-panel__explanation { color: var(--text); font-size: 0.85rem; }
+.evidence-panel__signals { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.evidence-panel__signal { border-top: 1px solid var(--border); padding-top: 8px; }
+.evidence-panel__signal-header { display: flex; justify-content: space-between; font-size: 0.8rem; }
+.evidence-panel__signal-type { font-weight: 600; }
+.evidence-panel__signal-version { color: var(--text-muted); }
+.evidence-panel__evidence-list { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 6px 0 0; font-size: 0.78rem; }
+.evidence-panel__evidence-list dt { color: var(--text-muted); }
+.evidence-panel__empty { color: var(--text-muted); padding: 24px; text-align: center; }
+
+.instrument-detail { display: flex; flex-direction: column; gap: 16px; padding: 16px; }

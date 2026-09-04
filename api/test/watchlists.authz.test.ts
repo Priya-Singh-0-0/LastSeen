@@ -12,6 +12,8 @@ import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import { registerAuthRoutes } from '../src/auth/routes.js';
 import { registerWatchlistRoutes } from '../src/watchlists/routes.js';
+import { registerInstrumentRoutes } from '../src/instruments/routes.js';
+import { registerCheckpointRoutes } from '../src/checkpoints/routes.js';
 import { SESSION_COOKIE_NAME } from '../src/auth/middleware.js';
 import { getPool, _resetPool } from '../src/db.js';
 
@@ -19,6 +21,7 @@ pg.types.setTypeParser(1700 as pg.TypeId, (v: string) => v);
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const describeWithDb = DATABASE_URL ? describe : describe.skip;
+const ACK_SECRET = 'test-ack-token-secret-at-least-32-chars-long';
 
 describeWithDb('T10 — cross_user_authorization_denied', () => {
   let pool: pg.Pool;
@@ -26,6 +29,8 @@ describeWithDb('T10 — cross_user_authorization_denied', () => {
   let userAToken: string;
   let userBToken: string;
   let userAWatchlistId: string;
+  let userAInstrumentId: string;
+  let userAAckToken: string;
   let client: pg.PoolClient;
 
   beforeAll(async () => {
@@ -36,6 +41,8 @@ describeWithDb('T10 — cross_user_authorization_denied', () => {
     await app.register(fastifyCookie);
     await registerAuthRoutes(app, pool);
     await registerWatchlistRoutes(app, pool);
+    await registerInstrumentRoutes(app, pool, ACK_SECRET);
+    await registerCheckpointRoutes(app, pool, ACK_SECRET);
     await app.ready();
 
     // Register user A and B, login, and create a watchlist for user A.
@@ -67,6 +74,23 @@ describeWithDb('T10 — cross_user_authorization_denied', () => {
       payload: { name: 'A\'s watchlist' },
     });
     userAWatchlistId = (JSON.parse(wlRes.body) as { id: string }).id;
+
+    // Create an instrument (no market state — WARMING) and add it to A's watchlist directly,
+    // bypassing symbol resolution (T30 — instrument-owned routes need coverage here too).
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO instruments (resolution_status) VALUES ('RESOLVED') RETURNING id`,
+    );
+    userAInstrumentId = rows[0].id;
+    await pool.query(
+      `INSERT INTO watchlist_items (watchlist_id, instrument_id) VALUES ($1, $2)`,
+      [userAWatchlistId, userAInstrumentId],
+    );
+
+    const getA = await app.inject({
+      method: 'GET', url: `/instruments/${userAInstrumentId}`,
+      cookies: { [SESSION_COOKIE_NAME]: userAToken },
+    });
+    userAAckToken = (JSON.parse(getA.body) as { ackToken: string }).ackToken;
   });
 
   afterAll(async () => {
@@ -101,6 +125,23 @@ describeWithDb('T10 — cross_user_authorization_denied', () => {
       expect(res.statusCode).toBe(404);
     },
   );
+
+  it('cross_user_authorization_denied: user B → 404 on GET /instruments/:id (T30)', async () => {
+    const res = await app.inject({
+      method: 'GET', url: `/instruments/${userAInstrumentId}`,
+      cookies: { [SESSION_COOKIE_NAME]: userBToken },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('cross_user_authorization_denied: user B → rejected on POST /instruments/:id/acknowledge with A\'s token (T30)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: `/instruments/${userAInstrumentId}/acknowledge`,
+      cookies: { [SESSION_COOKIE_NAME]: userBToken },
+      payload: { ack_token: userAAckToken },
+    });
+    expect(res.statusCode).toBe(403);
+  });
 
   it('GET /watchlists returns only the authenticated user\'s own watchlists', async () => {
     // Create a watchlist for B.
