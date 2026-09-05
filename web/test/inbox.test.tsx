@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { AttentionBand } from '../src/components/AttentionBand.js';
 import { EnvelopeBadge } from '../src/components/EnvelopeBadge.js';
@@ -242,6 +242,62 @@ describe('Inbox page (T32/T40)', () => {
   it('renders an empty-watchlist state when there are no items', () => {
     render(<Inbox data={{ watchlistId: '42', items: [] }} />);
     expect(screen.getByText(/nothing on this watchlist yet/i)).toBeInTheDocument();
+  });
+
+  describe('removing an instrument (T-UI-3)', () => {
+    function rowForSymbol(symbol: string): HTMLElement {
+      return screen.getByText(symbol).closest('tr')!;
+    }
+
+    it('renders a remove button per row with an accessible name naming the symbol', () => {
+      render(<Inbox data={response} />);
+      expect(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove MSFT from this watchlist' })).toBeInTheDocument();
+    });
+
+    it('does not call onRemoveInstrument or onSelectInstrument when the remove button is clicked (confirm first)', () => {
+      let removed: string | null = null;
+      let selected: string | null = null;
+      render(
+        <Inbox
+          data={response}
+          onRemoveInstrument={(id) => (removed = id)}
+          onSelectInstrument={(id) => (selected = id)}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
+      expect(removed).toBeNull();
+      expect(selected).toBeNull();
+      expect(within(rowForSymbol('AAPL')).getByText('Remove?')).toBeInTheDocument();
+    });
+
+    it('calls onRemoveInstrument exactly once with the instrument id when "Yes" is clicked', () => {
+      let removed: string | null = null;
+      let removeCalls = 0;
+      render(
+        <Inbox
+          data={response}
+          onRemoveInstrument={(id) => {
+            removed = id;
+            removeCalls++;
+          }}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
+      fireEvent.click(within(rowForSymbol('AAPL')).getByRole('button', { name: 'Yes' }));
+      expect(removed).toBe('101');
+      expect(removeCalls).toBe(1);
+    });
+
+    it('restores the remove control and calls nothing when "Cancel" is clicked', () => {
+      let removed: string | null = null;
+      render(<Inbox data={response} onRemoveInstrument={(id) => (removed = id)} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
+      fireEvent.click(within(rowForSymbol('AAPL')).getByRole('button', { name: 'Cancel' }));
+      expect(removed).toBeNull();
+      expect(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' })).toBeInTheDocument();
+      expect(screen.queryByText('Remove?')).not.toBeInTheDocument();
+    });
   });
 });
 

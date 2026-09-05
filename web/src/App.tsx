@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import * as api from './api/client.js';
 import { ApiError } from './api/client.js';
+import { AddInstrumentForm } from './components/AddInstrumentForm.js';
+import type { AddInstrumentStatus } from './components/AddInstrumentForm.js';
 import { ErrorState } from './components/ErrorState.js';
 import { SignInView } from './components/SignInView.js';
 import { SummaryStrip } from './components/SummaryStrip.js';
@@ -28,6 +30,10 @@ export function App() {
   const [watchlists, setWatchlists] = useState<readonly WatchlistWire[]>([]);
   const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(null);
   const [inbox, setInbox] = useState<InboxResponse | null>(null);
+  const [itemIdByInstrumentId, setItemIdByInstrumentId] = useState<ReadonlyMap<string, string>>(
+    new Map(),
+  );
+  const [addStatus, setAddStatus] = useState<AddInstrumentStatus>({ kind: 'idle' });
   const [detail, setDetail] = useState<InstrumentDetailResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null);
@@ -61,8 +67,12 @@ export function App() {
 
   const loadInbox = useCallback(async (watchlistId: string) => {
     try {
-      const data = await api.getInbox(watchlistId);
+      const [data, items] = await Promise.all([
+        api.getInbox(watchlistId),
+        api.getWatchlistItems(watchlistId),
+      ]);
       setInbox(data);
+      setItemIdByInstrumentId(new Map(items.map((item) => [item.instrumentId, item.id])));
       setLastCheckedAt(new Date().toISOString());
       setLoadError(null);
     } catch (err) {
@@ -144,6 +154,37 @@ export function App() {
     }
   }
 
+  async function handleAddInstrument(symbol: string) {
+    if (!selectedWatchlistId) return;
+    try {
+      const result = await api.addWatchlistItem(selectedWatchlistId, symbol);
+      setAddStatus({ kind: 'added', symbol, state: result.state });
+      await loadInbox(selectedWatchlistId);
+    } catch (err) {
+      setAddStatus({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Failed to add instrument',
+      });
+      throw err;
+    }
+  }
+
+  async function handleRemoveInstrument(instrumentId: string) {
+    if (!selectedWatchlistId) return;
+    const itemId = itemIdByInstrumentId.get(instrumentId);
+    if (itemId === undefined) {
+      // The map is stale relative to a concurrent change — refetch rather than guessing an id.
+      await loadInbox(selectedWatchlistId);
+      return;
+    }
+    try {
+      await api.removeWatchlistItem(selectedWatchlistId, itemId);
+      await loadInbox(selectedWatchlistId);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to remove instrument');
+    }
+  }
+
   if (signedIn === null) return null;
   if (signedIn === false) {
     return (
@@ -188,8 +229,17 @@ export function App() {
       {inbox ? (
         <>
           <SummaryStrip items={inbox.items} />
+          <AddInstrumentForm
+            onAdd={handleAddInstrument}
+            status={addStatus}
+            onDismissStatus={() => setAddStatus({ kind: 'idle' })}
+          />
           <main className="app-shell__table-wrap">
-            <Inbox data={inbox} onSelectInstrument={(id) => navigate({ kind: 'instrument', id })} />
+            <Inbox
+              data={inbox}
+              onSelectInstrument={(id) => navigate({ kind: 'instrument', id })}
+              onRemoveInstrument={(id) => void handleRemoveInstrument(id)}
+            />
           </main>
         </>
       ) : null}

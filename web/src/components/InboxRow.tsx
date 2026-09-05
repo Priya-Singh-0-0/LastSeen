@@ -1,4 +1,5 @@
-import type { KeyboardEvent } from 'react';
+import { useState } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { AttentionBand } from './AttentionBand.js';
 import { EnvelopePrice, EnvelopeStatus } from './EnvelopeBadge.js';
 import { Monogram } from './Monogram.js';
@@ -8,6 +9,7 @@ export interface InboxRowProps {
   readonly rank: number;
   readonly item: InboxItemWire;
   readonly onSelect: (instrumentId: string) => void;
+  readonly onRemove?: (instrumentId: string) => void;
 }
 
 const BAND_RAIL: Record<string, string> = {
@@ -17,9 +19,10 @@ const BAND_RAIL: Record<string, string> = {
   QUIET: 'inbox-row--rail-quiet',
 };
 
-export function InboxRow({ rank, item, onSelect }: InboxRowProps) {
+export function InboxRow({ rank, item, onSelect, onRemove }: InboxRowProps) {
   const dimmed = item.dataFreshness === 'STALE' || item.dataFreshness === 'UNAVAILABLE' || item.current === null;
   const railClass = item.maxUnseenBand !== null ? BAND_RAIL[item.maxUnseenBand] : 'inbox-row--rail-none';
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   function activate() {
     onSelect(item.instrumentId);
@@ -30,6 +33,22 @@ export function InboxRow({ rank, item, onSelect }: InboxRowProps) {
       event.preventDefault();
       activate();
     }
+  }
+
+  function handleRemoveClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    setConfirmingRemove(true);
+  }
+
+  function handleConfirmRemove(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    setConfirmingRemove(false);
+    onRemove?.(item.instrumentId);
+  }
+
+  function handleCancelRemove(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    setConfirmingRemove(false);
   }
 
   return (
@@ -88,6 +107,28 @@ export function InboxRow({ rank, item, onSelect }: InboxRowProps) {
         )}
       </td>
       <td className="inbox-row__explanation">{item.explanation}</td>
+      <td className="inbox-row__remove-cell">
+        {confirmingRemove ? (
+          <span className="inbox-row__confirm-remove">
+            <span>Remove?</span>
+            <button type="button" className="button" onClick={handleConfirmRemove}>
+              Yes
+            </button>
+            <button type="button" className="button" onClick={handleCancelRemove}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="inbox-row__remove-button"
+            aria-label={`Remove ${item.symbol} from this watchlist`}
+            onClick={handleRemoveClick}
+          >
+            ×
+          </button>
+        )}
+      </td>
     </tr>
   );
 }

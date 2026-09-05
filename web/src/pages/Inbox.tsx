@@ -5,6 +5,7 @@ import '../styles.css';
 export interface InboxProps {
   readonly data: InboxResponse;
   readonly onSelectInstrument?: (instrumentId: string) => void;
+  readonly onRemoveInstrument?: (instrumentId: string) => void;
 }
 
 /**
@@ -12,14 +13,11 @@ export interface InboxProps {
  * ordered by the API's PersonalRanker. This component renders the ranking and every value
  * verbatim — it never re-sorts, scores, or computes a percentage itself (CLAUDE.md).
  */
-export function Inbox({ data, onSelectInstrument }: InboxProps) {
+export function Inbox({ data, onSelectInstrument, onRemoveInstrument }: InboxProps) {
   if (data.items.length === 0) {
     return (
       <div className="inbox__empty">
-        <p>Nothing on this watchlist yet.</p>
-        <button type="button" className="button button--primary">
-          Add an instrument
-        </button>
+        <p>Nothing on this watchlist yet. Add a symbol above.</p>
       </div>
     );
   }
@@ -36,6 +34,9 @@ export function Inbox({ data, onSelectInstrument }: InboxProps) {
           <th className="inbox-table__col-unseen">Unseen</th>
           <th className="inbox-table__col-data">Data</th>
           <th className="inbox-table__col-explanation">What changed</th>
+          <th className="inbox-table__col-remove">
+            <span className="visually-hidden">Remove</span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -45,6 +46,7 @@ export function Inbox({ data, onSelectInstrument }: InboxProps) {
             rank={index + 1}
             item={item}
             onSelect={(id) => onSelectInstrument?.(id)}
+            onRemove={(id) => onRemoveInstrument?.(id)}
           />
         ))}
       </tbody>
