@@ -104,6 +104,23 @@ export function App() {
     }
   }
 
+  async function handleRegister(email: string, password: string) {
+    try {
+      await api.register(email, password);
+      await api.login(email, password);
+      setSignInError(null);
+      await loadWatchlists();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setSignInError('An account with that email already exists.');
+      } else if (err instanceof ApiError && err.status === 400) {
+        setSignInError('Check your email and password — passwords need at least 8 characters.');
+      } else {
+        setSignInError(err instanceof Error ? err.message : 'Registration failed');
+      }
+    }
+  }
+
   async function handleSignOut() {
     await api.logout();
     setSignedIn(false);
@@ -128,7 +145,16 @@ export function App() {
   }
 
   if (signedIn === null) return null;
-  if (signedIn === false) return <SignInView onSignIn={handleSignIn} error={signInError} />;
+  if (signedIn === false) {
+    return (
+      <SignInView
+        onSignIn={handleSignIn}
+        onRegister={handleRegister}
+        error={signInError}
+        onModeChange={() => setSignInError(null)}
+      />
+    );
+  }
 
   if (loadError !== null) {
     return (

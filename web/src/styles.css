@@ -273,6 +273,25 @@ button {
   color: var(--down);
   font-size: 13px;
 }
+.sign-in__hint {
+  margin: -8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.sign-in__toggle {
+  align-self: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.sign-in__toggle:hover,
+.sign-in__toggle:focus-visible {
+  color: var(--accent);
+}
 
 /* ── error state ────────────────────────────────────────────────────────── */
 
