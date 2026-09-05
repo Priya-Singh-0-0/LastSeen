@@ -1,5 +1,34 @@
-import { parseDecimal, toWireString, fromDate } from '@stockwatch/contracts';
-import type { ValueEnvelope } from '@stockwatch/contracts';
+import { parseDecimal, toWireString, fromDate, nowUtc, MarketStatus, ValueKind, DataFreshness } from '@stockwatch/contracts';
+import type { ValueEnvelope, UtcTimestamp } from '@stockwatch/contracts';
+
+/**
+ * Staleness threshold (T36 — INV-11), a judgment call not an architecture-quoted constant:
+ * how long an `OPEN` market's `ingestedAt` may trail the current read time before the API
+ * itself relabels the envelope `STALE`/`LAST_KNOWN` — the worker only writes on ingestion and
+ * has no way to notice time passing while a provider stays silent (architecture §M: "market
+ * state untouched"), so this decay has to be computed at read time instead.
+ */
+const STALE_AFTER_MS = 20 * 60 * 1000;
+
+/**
+ * Decays a stored envelope's freshness/value-kind at read time (architecture §I: "Provider
+ * silent past threshold, market open" → `LAST_KNOWN` / `STALE`). Only an `OPEN` market can be
+ * downgraded this way — a `CLOSED` session holding its close, or a `HALTED` last trade, is
+ * legitimately `FRESH` no matter how much real time has elapsed.
+ */
+function decayFreshness(
+  marketStatus: ValueEnvelope['marketStatus'],
+  valueKind: ValueEnvelope['valueKind'],
+  dataFreshness: ValueEnvelope['dataFreshness'],
+  ingestedAt: UtcTimestamp,
+  now: UtcTimestamp,
+): { valueKind: ValueEnvelope['valueKind']; dataFreshness: ValueEnvelope['dataFreshness'] } {
+  if (marketStatus !== MarketStatus.OPEN) return { valueKind, dataFreshness };
+  if (now - ingestedAt >= STALE_AFTER_MS) {
+    return { valueKind: ValueKind.LAST_KNOWN, dataFreshness: DataFreshness.STALE };
+  }
+  return { valueKind, dataFreshness };
+}
 
 
 /**
@@ -24,16 +53,25 @@ export interface MarketStateRow {
  * All financial values are Decimal internally; crossed to the wire as strings.
  * This is the ONLY place that constructs a ValueEnvelope from DB data.
  */
-export function assembleEnvelope(row: MarketStateRow): ValueEnvelope {
+export function assembleEnvelope(row: MarketStateRow, now: UtcTimestamp = nowUtc()): ValueEnvelope {
+  const ingestedAt = fromDate(row.ingested_at);
+  const marketStatus = row.market_status as ValueEnvelope['marketStatus'];
+  const decayed = decayFreshness(
+    marketStatus,
+    row.value_kind as ValueEnvelope['valueKind'],
+    row.data_freshness as ValueEnvelope['dataFreshness'],
+    ingestedAt,
+    now,
+  );
   return {
     value: parseDecimal(row.price),
     currency: row.currency,
     marketTimestamp: fromDate(row.market_timestamp),
-    ingestedAt: fromDate(row.ingested_at),
+    ingestedAt,
     source: row.source,
-    marketStatus: row.market_status as ValueEnvelope['marketStatus'],
-    valueKind: row.value_kind as ValueEnvelope['valueKind'],
-    dataFreshness: row.data_freshness as ValueEnvelope['dataFreshness'],
+    marketStatus,
+    valueKind: decayed.valueKind,
+    dataFreshness: decayed.dataFreshness,
     precisionHint: row.precision_hint,
   };
 }
