@@ -234,6 +234,7 @@ export async function registerInstrumentRoutes(
         ...(diff.elapsedMs !== undefined ? { elapsedMs: diff.elapsedMs } : {}),
         ...(diff.sessionsElapsed !== undefined ? { sessionsElapsed: diff.sessionsElapsed } : {}),
         ...(diff.volatilityMultiple !== undefined ? { volatilityMultiple: toWireString(diff.volatilityMultiple) } : {}),
+        ...(diff.adjustmentLabels !== undefined ? { adjustmentLabels: diff.adjustmentLabels } : {}),
       };
     } else {
       // No market state yet (WARMING) — there is nothing to diff against.

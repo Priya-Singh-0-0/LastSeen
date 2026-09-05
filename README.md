@@ -60,6 +60,32 @@ Verified live against a paper-trading account (2026-09), combining the [Alpaca m
 
 Because there is no earnings/calendar-events endpoint at any tier, `EARNINGS_RELEASED` events use T38's seeded fallback, with `source` always marked `seeded` — never silently faked as live data.
 
+## Demo seed (T38)
+
+`db/seeds/demo.sql` reproduces a full demo state from an empty (post-migration) database in
+one command:
+
+```bash
+npm run migrate -w api
+npm run seed -w api          # applies db/seeds/demo.sql against $DATABASE_URL
+```
+
+Seeds ~33 liquid tickers with 400 sessions of daily bars each, a demo user
+(`demo@stockwatch.dev` / `demo12345`) with a watchlist following all of them and a checkpoint
+baselined two trading sessions back, and three instruments that make the demo path in
+architecture §1 visible immediately after seeding:
+
+- **TSLA** — a large volatility-adjusted move plus an earnings event on the latest session
+  (ranks top of the demo user's inbox)
+- **AAPL** — a 4-for-1 split whose checkpoint baseline predates it, so the instrument detail
+  view shows a real read-time-adjusted comparison rather than a suppressed or crashed one
+  (architecture §I / INV-12, T34)
+- **GME** — an abnormal-volume episode over the last few sessions
+
+All synthetic rows carry `source = 'seeded'`, per the same never-silently-faked rule as the
+earnings fallback above. Not idempotent — re-running against an already-seeded database fails
+on the demo user's unique email; re-seed by dropping and recreating the database.
+
 ## Workspace structure
 
 ```

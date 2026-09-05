@@ -1,0 +1,8 @@
+{
+  "_comment": "Provider-neutral shape of the 4-for-1 split seeded onto AAPL by db/seeds/demo.sql (T38). effective_date there is computed relative to the seed's run time (latest trading session minus daysBeforeLatestSession), so it is not repeated here verbatim — see worker/test/demoFixtures.test.ts, which asserts classifyCorporateAction and corporateActionDedupeKey agree with the literal factor/dedupe-key format hardcoded in demo.sql.",
+  "instrumentSymbol": "AAPL",
+  "actionType": "SPLIT",
+  "daysBeforeLatestSession": 60,
+  "adjustmentFactor": "0.25",
+  "source": "seeded"
+}

@@ -5,20 +5,99 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-**T35 — Unsupported-action suppression**
-Objective: Modify `api/src/diff/engine.ts`, `web/src/pages/InstrumentDetail.tsx`; Test
-`api/test/suppression.test.ts`. Invariants INV-12. Depends on T34 (done).
+**T39 — Correctness gate sweep**
+Objective: prove the whole §6 gate set runs green together, in CI. Create
+`.github/workflows/ci.yml` (or `Makefile` targets); Modify `README.md`. Depends on T38 (done).
 
 ## Completed
 
-T1–T34 (Phase 0–5: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
+T38 (Demo seed). `db/seeds/demo.sql` + `api/src/seed.ts` (the "single command", `npm run seed
+-w api`) + `worker/test/fixtures/demo/{corporate-action,market-event}.json` + `api/test/
+demoSeed.test.ts` + `worker/test/demoFixtures.test.ts`; Modified `README.md`,
+`api/package.json`, `api/src/instruments/routes.ts`.
+- **Seed shape:** one PL/pgSQL `DO` block, set-based per ticker (no per-day loop — bars are
+  generated via `generate_series` + a deterministic sine-wave walk, keyed only by row number
+  and ticker length, so the file has no external randomness dependency). ~33 real, liquid
+  tickers (chosen for demo recognizability, not fetched — every synthetic row carries
+  `source = 'seeded'`) get exactly 400 daily bars each, ending at the most recent trading day
+  at-or-before seed-apply time (`CURRENT_DATE`, rolled back over a weekend) — not a fixed date,
+  so the seed never goes stale relative to when it's actually run. `market_status =
+  'CLOSED'`/`value_kind = 'SESSION_CLOSE'` throughout (never `OPEN`) so T36's freshness decay
+  (which only downgrades an `OPEN` market) can never make seeded data look stale no matter how
+  long after seeding a demo/test actually runs.
+- **Three "interesting" instruments, one demo user, one watchlist, uniform checkpoint policy:**
+  every seeded instrument gets a checkpoint baselined at the bar **two sessions before the
+  latest** (`OFFSET 2`, not a literal calendar "two days" — guarantees a real trading-session
+  bar exists regardless of weekends), `baseline_corporate_action_version = 0`,
+  `seen_through_publication_seq = 0`. TSLA and GME additionally get `published_seq = 1` bumped
+  onto their `instruments` row plus a hand-written `change_records`/`instrument_signals` pair
+  (score/band/evidence set directly, not derived by running the real detector/scoring pipeline
+  — this seed stands in for ingestion history, it doesn't replay it) so they have real unseen
+  changes. AAPL's `instruments.corporate_action_version` is set to `1` at creation time (not
+  bumped later) with a matching `corporate_actions` row (`SPLIT`, factor `0.25`,
+  `is_supported = true`), while its checkpoint keeps the uniform `baseline_corporate_action_
+  version = 0` — this mismatch is what makes `factorBetween` apply the split adjustment for
+  real when the instrument detail route runs, without any special-cased "pretend this is
+  unseen" logic. AAPL's checkpoint `baseline_price` is deliberately the bar-2-sessions-back
+  close **× 4** (bars are stored already split-adjusted, matching how a real provider backfills
+  history) — i.e. the pre-split price the user would actually have seen, exactly mirroring
+  T34's regression scenario (`$180` pre-split baseline vs. `$46`-scale current price) with real
+  seeded numbers instead of hand-picked literals.
+- **Real bug found and fixed while wiring the acceptance test through the actual HTTP route:**
+  `GET /instruments/:id` (`api/src/instruments/routes.ts`) computes `diff.adjustmentLabels`
+  (T34) but never spread it into the response — the split label existed in `DiffResult` and
+  was asserted at the unit level (`split.regression.test.ts`) but silently dropped before
+  reaching the wire. No test had exercised the full HTTP route with an unsupported-vs-supported
+  version mismatch until this task's seed did. Fixed with one added conditional spread line,
+  same convention as every other optional `diffFields` entry.
+- **`comparisonStatus` for the seeded AAPL split is `INSUFFICIENT_HISTORY`, not `OK` — this is
+  correct, not a seed bug.** `GET /instruments/:id` always passes `sigma20: null` (a
+  pre-existing, already-documented gap — see the T30 addendum above: `FeatureExtractor` isn't
+  wired into any ingestion/persistence path yet, so no read path has a real `sigma20` to
+  offer). Per T27, `INSUFFICIENT_HISTORY` still carries the real `percentageChange`/
+  `adjustmentLabels` — only `volatilityMultiple` is omitted — so the split adjustment is
+  genuinely exercised end-to-end regardless. The acceptance test asserts `INSUFFICIENT_HISTORY`
+  explicitly (with a comment pointing here) rather than loosening to "any non-suppressed
+  status," so a future fix to the `sigma20` gap that changes this to `OK` will be a deliberate,
+  visible test update, not a silent pass-through.
+- **Test isolation:** `api/test/demoSeed.test.ts` never touches the shared dev/test database.
+  The seed is not idempotent (fixed demo-user email, fixed real-looking tickers that could
+  collide with other tests' `instrument_symbols` rows), so the test creates a disposable
+  `stockwatch_demo_seed_test_<timestamp>` database via a superuser admin pool, runs
+  `runMigrations` + `runDemoSeed` against it, and drops it (`WITH (FORCE)`) in `afterAll`.
+  **Found and fixed a pool leak while building this:** `runMigrations`/`runDemoSeed` both call
+  `api/src/db.ts`'s `getPool()` — a module-level singleton — internally; failing to `.end()`
+  that pool before the `FORCE` drop left a lingering superuser connection that Postgres killed
+  out from under it, logging a spurious (but harmless) `[db] unexpected pool error` on every
+  run. Fixed by explicitly ending that singleton's pool and calling `_resetPool()` before
+  creating the test's own `stockwatch_api`-role pool against the scratch database.
+- **`worker/test/fixtures/demo/*` role:** two small JSON fixtures documenting the seeded AAPL
+  split and TSLA earnings event in provider-neutral shape, plus `worker/test/
+  demoFixtures.test.ts` pinning `demo.sql`'s hand-written literals (the `0.25` factor, the
+  `CORPORATE_ACTION_APPLIED:SPLIT:<date>:0.25` dedupe-key format) against the real
+  `classifyCorporateAction`/`corporateActionDedupeKey`/`earningsDedupeKey` functions — so a
+  future change to classification rules or dedupe-key format fails here instead of silently
+  drifting from what `demo.sql` assumes. `effective_date`/`event_ts` are computed relative to
+  seed-apply time in `demo.sql`, so the fixtures record the *relationship*
+  (`daysBeforeLatestSession: 60`, `fiscalPeriod`) rather than a literal date.
+- **Verification:** `cd api && direnv exec . npx vitest run` — 167/167 (3 new in
+  `demoSeed.test.ts`). `cd worker && direnv exec . npx vitest run` — 109/109 (3 new in
+  `demoFixtures.test.ts`). `npx tsc --noEmit` clean in both. `npx eslint src test` clean in
+  `api`; `worker` has the same 11 pre-existing errors as before this task (`db.ts`,
+  `normalize/selector.ts`, `normalize/validate.ts`, `provider/fixture.ts`, `test/
+  jobs.queue.test.ts`), none in the two new files.
+
+## Previously completed
+
+T1–T37 (Phase 0–5: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
 CRUD, job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor,
 dedupe keys, the eight detectors, Scoring v1, ChangeAssembler v1, Publisher, shared template
 explanation, AdjustmentPolicy read side, ack token mint/verify, checkpoint repository monotonic
 upsert, instrument detail GET and acknowledge POST, inbox read model/ranking/personal explanation,
 inbox/detail UI with evidence drill-down — basic pass, visual polish deferred to impeccable;
 Phase 6: split detection and AdjustmentPolicy write side, split-adjusted comparison across a
-checkpoint).
+checkpoint, unsupported-action suppression; Phase 7: freshness lifecycle and staleness labelling,
+AlpacaAdapter on the official Node SDK).
 
 ## Pre-existing `api` tsc/eslint cleanup (done between T34 and T35, not a numbered task)
 
@@ -446,6 +525,144 @@ files by default).
 
 ## Last completed task
 
+T37 (AlpacaAdapter on the official Node SDK). Live capability spike first (per the plan's
+mandatory Step 1), combining the official docs (`docs.alpaca.markets/us/docs/getting-started-
+with-alpaca-market-data`, followed to `llms.txt` for reference pages) with real calls against the
+paper account: snapshots ✓ (`GET /v2/stocks/snapshots`), historical daily bars ✓ (`GET
+/v2/stocks/bars`), corporate actions/splits ✓ (`GET /v1/corporate-actions`, confirmed against
+AAPL's real 2020 4-for-1 split), earnings/calendar events ✗ (no such endpoint exists at any tier —
+only a deprecated, non-earnings-specific announcements endpoint). Findings recorded in `README.md`
+("Alpaca capability verification (T37)"); the earnings gap is the documented justification for
+T38's seeded-events fallback with `source: seeded`.
+- **`worker/src/provider/alpaca/dto.ts`**: Alpaca-shaped raw types only (`AlpacaBar`,
+  `AlpacaSnapshot`/`AlpacaSnapshotMap`, `AlpacaClock`) — not exported past this directory.
+- **`worker/src/provider/alpaca/client.ts`**: the *sole* file importing `@alpacahq/alpaca-trade-
+  api` (INV-13/INV-17), enforced by a new source-scan boundary test in the contract test file
+  (recursively greps `worker/src/provider/**/*.ts` for `@alpacahq/` import strings — a
+  finer-grained, file-level companion to T4's package-level import-boundary test).
+  `createAlpacaClient(options)` wraps `new Alpaca({ keyId, secret, paper: true, fetchApi })`
+  (`fetchApi` is test-only, letting tests stub HTTP responses with zero live network calls). The
+  SDK's own proactive rate limiter (~200 req/min per host) and default retry/backoff (3 attempts,
+  exponential 250ms–5s, on 429/5xx) are used at their documented defaults rather than
+  reimplemented — this *is* "a global token bucket and backoff on 429/5xx" per T37's requirement,
+  verified via a stubbed 429→200 sequence through `fetchApi` (no live network call). `StockHistoricalFeed`
+  (bars) has no `delayed_sip` value, unlike the snapshot feed type — `toHistoricalFeed` maps
+  `delayed_sip` to `undefined` (SDK default) rather than erroring, since bars simply don't offer
+  that tier.
+- **`worker/src/provider/alpaca/adapter.ts`**: `AlpacaAdapter implements ProviderAdapter`,
+  constructor-injected with `AlpacaMarketDataClient`. `fetchSnapshots` calls `fetchSnapshots` +
+  `fetchClock` in parallel; `marketStatus`/`valueKind` are derived from the clock's `isOpen`
+  boolean alone (`OPEN`/`LIVE` vs. `CLOSED`/`SESSION_CLOSE`) — a **judgment call, not an
+  architecture quote**: Alpaca's clock has no `PRE_OPEN`/`HALTED` signal, so this adapter has no
+  producer for those states yet. Price prefers `latestTrade.p`, falling back to `dailyBar.c`;
+  symbols with no usable price or timestamp are silently omitted (never thrown), matching T14's
+  `FixtureAdapter` contract. `instrumentId` always defaults to `'0'` — same convention as
+  `FixtureAdapter`, since the caller (`jobs/handlers.ts`) already stamps in the real id.
+  `dataFreshness` is always emitted as `FRESH`, since T36's `classifyFreshness` recomputes it at
+  persist time regardless of what the adapter supplies.
+- **Scope boundary**: strictly the plan's named files. Did not touch `ProviderAdapter`,
+  `jobs/handlers.ts`, `persist/actions.ts`, `adjustment/index.ts`, or `main.ts` — no ingestion
+  scheduler loop exists yet to wire a live adapter into (still a placeholder in `main.ts`), and
+  corporate-actions/earnings findings are recorded in prose (README/this file), not new code.
+- **`worker/src/config.ts`**: added `ALPACA_FEED: z.enum(['iex','sip','delayed_sip','otc']).
+  default('iex')` — paper accounts get `iex` by default; `worker/test/smoke.test.ts` gained 2 cases
+  (default + explicit override).
+- **Tests**: `worker/test/provider.alpaca.contract.test.ts` (10/10) — golden-file contract tests
+  against real recorded Alpaca payloads under `worker/test/fixtures/alpaca/` (valid snapshot,
+  market-closed, empty/missing-data snapshot, future-timestamp clock-skew rejection, no
+  provider-specific keys leak, unknown symbol, `fetchDailyBars` normalization, unknown-symbol
+  bars), 1 rate-limit-backoff test, 1 SDK-import-boundary test.
+- **Verification**: `cd worker && direnv exec . npx vitest run` — 106/106. `npx tsc --noEmit`
+  clean. `npx eslint src test` — same 11 pre-existing errors as before T37 (`db.ts`,
+  `normalize/selector.ts`, `normalize/validate.ts`, `provider/fixture.ts`, `test/
+  jobs.queue.test.ts`), none in the new/modified files.
+- **Fixed a real cross-suite test-isolation bug found while verifying T37** (was initially
+  misdiagnosed as a pre-existing, unrelated `jobs.queue.test.ts` flake — it wasn't):
+  `api/test/tracking.test.ts` and `api/test/watchlists.additem.test.ts` exercise `POST
+  /watchlists/:id/items`, which enqueues real, committed `resolve_instrument`/`backfill_bars` rows
+  into the shared `jobs` table (INV-1) — neither file cleaned those up, so they silently
+  accumulated across every `api` test run and were later claimed by `worker/test/
+  jobs.queue.test.ts`'s tests (which assume an empty queue), causing nondeterministic id/count
+  mismatches there. Fixed by adding an `afterAll` in both files that deletes everything with
+  `created_at >= testsStartedAt` (a timestamp captured at the top of `beforeAll`) — safe because
+  `api/vitest.config.ts` sets `fileParallelism: false` and root `npm test` runs workspaces
+  sequentially, so no other suite's rows can fall in that window. The delete must run over
+  `TEST_DATABASE_URL` (superuser), not the ordinary `DATABASE_URL` pool — `stockwatch_api` has no
+  `DELETE` grant on `jobs` (T6), so both files gained the same `pool`/`setupPool` split already
+  used by `adjustment.test.ts`/`checkpoint.repo.test.ts`/`inbox.test.ts`. Verified: fresh `api`
+  suite run (164/164) leaves 0 rows in `jobs` (checked via `psql` under a superuser role), and the
+  full `worker` suite (106/106, including `jobs.queue.test.ts`) then passes with **no manual
+  truncation** — previously this required the "stale rows" `TRUNCATE` workaround documented below.
+
+## Previously completed task
+
+T36 (Freshness lifecycle and staleness labelling). Split into two independently-testable halves
+across the write/read boundary, since the worker only writes on ingestion and can't itself notice
+time passing while a provider stays silent (architecture §M: "market state untouched"):
+- **Write-side classification (`worker/src/persist/marketState.ts`):** new exported pure
+  `classifyFreshness(marketStatus, marketTimestamp, ingestedAt)` — the worker no longer trusts
+  `obs.dataFreshness` verbatim from the provider (fixture-supplied, never decays); instead it
+  derives `data_freshness` itself from the feed's own lag (`ingestedAt - marketTimestamp`),
+  matching CLAUDE.md's "worker owns... shared market intelligence." Only an `OPEN` market can be
+  downgraded (`DELAYED` past 5min lag, `STALE` past 20min) — any other `market_status` (`CLOSED`
+  holding `SESSION_CLOSE`, `HALTED` holding `LAST_TRADE`, etc.) is always `FRESH`, per architecture
+  §I's table. `upsertMarketState` now computes and writes this instead of the observation's own
+  field. `worker/test/freshness.test.ts` (4/4, pure).
+- **Read-side decay (`api/src/market/envelope.ts`):** `assembleEnvelope(row, now = nowUtc())` takes
+  an injectable `now` and applies a private `decayFreshness` before constructing the envelope — an
+  `OPEN` market whose `ingested_at` is ≥20min behind `now` is relabelled `STALE`/`LAST_KNOWN`
+  (architecture §I: "Provider silent past threshold, market open" → `OPEN`/`LAST_KNOWN`/`STALE`),
+  regardless of what was stored at ingestion. This is the actual "decay" (elapsed *read* time, not
+  just ingestion-time feed lag) — since `assembleEnvelope` is the sole envelope constructor (T16)
+  and both `instruments/routes.ts` and `inbox/routes.ts` already call it with no `now` argument,
+  the decay flows through to `DiffResult.dataFreshness` and `PersonalRanker`'s de-weighting for
+  free — no changes needed to `diff/engine.ts` or `ranking/ranker.ts` (T31's `isStale`/
+  `STALENESS_DEWEIGHT` already de-weight `STALE`/`UNAVAILABLE` and leave `DELAYED` alone; this was
+  verified against the existing `ranker.test.ts` suite, not re-implemented). `api/test/
+  staleness.test.ts` (3/3, pure) — the named gate `stale_data_is_labelled_not_hidden`: an `OPEN`
+  market past the stale threshold reads `LAST_KNOWN`/`STALE`; a `CLOSED` market holding
+  `SESSION_CLOSE` stays `FRESH` even after 3 simulated days; a stale `URGENT` item is still present
+  (never dropped) and de-weighted below a threshold in a ranked list built directly from
+  `assembleEnvelope`'s output.
+- **Threshold values (5min `DELAYED`, 20min `STALE`) are a judgment call, not an architecture
+  quote** — architecture §M only names the transition (`FRESH→DELAYED→STALE`), not numbers. Two
+  independent constants (one per file) rather than a shared export, since the worker's classifier
+  measures feed lag (`ingestedAt - marketTimestamp`) and the API's decay measures read lag
+  (`now - ingestedAt`) — different bases, so sharing a single "freshness" module across the
+  worker/API boundary wasn't warranted (CLAUDE.md: "Worker and API separation is architectural...
+  Neither imports the other").
+- **Verification:** `cd worker && direnv exec . npx vitest run` — 95/95 (4 new in
+  `freshness.test.ts`; a pre-existing unrelated `jobs.queue.test.ts` stale-rows failure was cleared
+  by truncating first, per the DB environment note below — not caused by this task).
+  `cd api && direnv exec . npx vitest run` — 164/164 (3 new in `staleness.test.ts`). `npx tsc
+  --noEmit` clean in both. `npx eslint src test` clean in `api`; `worker` has the same 11
+  pre-existing errors as before T36 (`db.ts`, `normalize/selector.ts`, `normalize/validate.ts`,
+  `provider/fixture.ts`, `test/jobs.queue.test.ts`), none in the two new/modified files.
+
+## Two tasks ago
+
+T35 (Unsupported-action suppression). No changes were needed to `api/src/diff/engine.ts`'s
+suppression logic itself — T27's `hasUnsupportedAction` short-circuit (return before computing
+`adjustedBaseline`/`absoluteChange`/`percentageChange`/`volatilityMultiple`) already satisfied the
+gate: those fields are omitted from `DiffResult` entirely (via conditional object-spread), not
+nulled or zeroed, and this holds even with a supported split alongside the unsupported action in
+the same version range, since `hasUnsupportedAction` is set by any unsupported row regardless of
+order. Added `api/test/suppression.test.ts` (3/3, pure — mirrors `split.regression.test.ts`'s
+style: asserts `'percentageChange' in result` etc. are all `false`) to make this gate explicit and
+regression-proof, per plan naming (`unsupported_corporate_action_suppresses_comparison`). The real
+new work was the UI side and the "reset baseline" option: `web/src/pages/InstrumentDetail.tsx` now
+renders a suppression label plus a "Reset baseline" button when `comparisonStatus ===
+'SUPPRESSED_CORPORATE_ACTION'`. The button reuses the existing `onAcknowledge` prop/ack-token flow
+(T29/T30) rather than a new endpoint — `POST /instruments/:id/acknowledge` already advances the
+checkpoint's baseline to the price/timestamp/corporate_action_version minted into the ack token at
+GET time (`advanceCheckpoint`'s `baseline_market_timestamp` freshness check in `checkpoints/
+repo.ts`), which is exactly "reset the baseline past the unsupported action." No new API field or
+route was needed for this. 3 new cases added to `web/test/inbox.test.tsx` (label+button render,
+button fires acknowledge once, and an OK-status render shows neither). `npx tsc --noEmit`/`npx
+eslint src test` clean in both `api` and `web`. Full `api` suite: 161/161. Full `web` suite: 22/22.
+
+## Three tasks ago
+
 T34 (Split-adjusted comparison across a checkpoint). `api/src/diff/adjustment.ts` +
 `api/src/diff/engine.ts` + `api/test/split.regression.test.ts` (4/4 — `split_across_checkpoint_
 does_not_report_crash`: baseline $180.00 at version 3, 4-for-1 split, current $46.00 at version 4,
@@ -464,7 +681,7 @@ tsc/eslint cleanup" section above) and fixed a real test-isolation bug in `auth.
 found while doing it. `npx tsc --noEmit` and `npx eslint src test` both clean. Full `api` suite:
 158/158.
 
-## Previously completed task
+## Four tasks ago
 
 T33 (Split detection and AdjustmentPolicy write side). `worker/src/adjustment/index.ts` +
 `worker/src/persist/actions.ts` + `worker/test/splits.test.ts` (7/7 — 3 pure classification
@@ -478,7 +695,7 @@ independently of this task's changes). See "Implementation decisions already mad
 above for the `CorporateActionCandidate` shape, the classification rule, the shared per-instrument
 `version_seq` counter, and the application-side idempotency check.
 
-## Two tasks ago
+## Five tasks ago
 
 T32 (Inbox and detail UI with evidence drill-down — basic pass). `web/src/pages/
 {Inbox,InstrumentDetail}.tsx` + `web/src/components/{AttentionBand,EnvelopeBadge,

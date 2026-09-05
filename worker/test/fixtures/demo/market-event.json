@@ -1,0 +1,7 @@
+{
+  "_comment": "Provider-neutral shape of the earnings event seeded onto TSLA by db/seeds/demo.sql (T38). No Alpaca earnings/calendar endpoint exists at any tier (README.md's 'Alpaca capability verification (T37)'), so this event has no providerEventId and dedupes on the eventTimestamp+fiscalPeriod fallback natural key, per architecture §G.",
+  "instrumentSymbol": "TSLA",
+  "eventType": "EARNINGS",
+  "fiscalPeriod": "Q_DEMO",
+  "source": "seeded"
+}
