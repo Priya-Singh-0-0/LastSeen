@@ -34,6 +34,9 @@ jobs:
           cache: npm
       - run: npm ci
 
+      # api/worker/web import @stockwatch/contracts' compiled dist (gitignored, not the source).
+      - run: npm run build -w packages/contracts
+
       # Fresh-database migration + role grants (T6), before any test touches the DB.
       - name: Run migrations against a fresh database
         run: npm run migrate -w api
