@@ -18,7 +18,10 @@ const CLASS: Record<AttentionBandValue, string> = {
   QUIET: 'band-pill band-pill--quiet',
 };
 
-/** Renders the backend-computed attention band verbatim (CLAUDE.md: no client-side scoring). */
+/**
+ * Renders the backend-computed attention band verbatim (CLAUDE.md: no client-side scoring).
+ * Deliberately amber-to-slate, never red/green — direction owns that ramp elsewhere.
+ */
 export function AttentionBand({ band }: AttentionBandProps) {
   if (band === null) {
     return <span className="band-pill band-pill--none">—</span>;

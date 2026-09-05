@@ -9,6 +9,8 @@ export interface EvidencePanelProps {
  * Exposes every unseen change record and the signals that produced it, verbatim from the
  * API (CLAUDE.md: the frontend never derives evidence — it only renders what the worker/API
  * already computed). No model output is ever rendered here, only deterministic signal facts.
+ * Every evidence key/value is rendered as-is, never renamed or filtered — this drill-down is
+ * the product's inspectability promise.
  */
 export function EvidencePanel({ changes }: EvidencePanelProps) {
   if (changes.length === 0) {
@@ -20,31 +22,34 @@ export function EvidencePanel({ changes }: EvidencePanelProps) {
         <article key={change.id} className="evidence-panel__record">
           <header className="evidence-panel__record-header">
             <AttentionBand band={change.band} />
-            {change.score !== null ? (
-              <span className="evidence-panel__score">{change.score}</span>
-            ) : null}
+            {change.score !== null ? <span className="evidence-panel__score">{change.score}</span> : null}
+            <span className="evidence-panel__published-at">{change.publishedAt}</span>
           </header>
           {change.sharedExplanation !== null ? (
             <p className="evidence-panel__explanation">{change.sharedExplanation}</p>
           ) : null}
-          <ul className="evidence-panel__signals">
-            {change.signals.map((signal) => (
-              <li key={signal.dedupeKey} className="evidence-panel__signal">
-                <div className="evidence-panel__signal-header">
-                  <span className="evidence-panel__signal-type">{signal.signalType}</span>
-                  <span className="evidence-panel__signal-version">detector v{signal.detectorVersion}</span>
-                </div>
-                <dl className="evidence-panel__evidence-list">
-                  {Object.entries(signal.evidence).map(([key, value]) => (
-                    <div key={key} className="evidence-panel__evidence-entry">
-                      <dt>{key}</dt>
-                      <dd>{String(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </li>
-            ))}
-          </ul>
+          <details className="evidence-panel__disclosure">
+            <summary>Evidence — {change.signals.length} signals</summary>
+            <ul className="evidence-panel__signals">
+              {change.signals.map((signal) => (
+                <li key={signal.dedupeKey} className="evidence-panel__signal">
+                  <div className="evidence-panel__signal-header">
+                    <span className="evidence-panel__signal-type">{signal.signalType}</span>
+                    <span className="evidence-panel__signal-version">detector v{signal.detectorVersion}</span>
+                    <span className="evidence-panel__signal-timestamp">{signal.marketTimestamp}</span>
+                  </div>
+                  <dl className="evidence-panel__evidence-list">
+                    {Object.entries(signal.evidence).map(([key, value]) => (
+                      <div key={key} className="evidence-panel__evidence-entry">
+                        <dt>{key}</dt>
+                        <dd>{String(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          </details>
         </article>
       ))}
     </div>

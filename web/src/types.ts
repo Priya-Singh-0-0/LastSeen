@@ -32,10 +32,13 @@ export interface DiffFields {
   readonly elapsedMs?: number;
   readonly sessionsElapsed?: number;
   readonly volatilityMultiple?: string;
+  readonly adjustmentLabels?: readonly string[];
 }
 
 export interface InboxItemWire extends DiffFields {
   readonly instrumentId: string;
+  readonly symbol: string;
+  readonly exchange: string | null;
   readonly comparisonStatus: ComparisonStatusValue;
   readonly dataFreshness: string;
   readonly current: EnvelopeWire | null;
@@ -48,6 +51,14 @@ export interface InboxItemWire extends DiffFields {
 export interface InboxResponse {
   readonly watchlistId: string;
   readonly items: readonly InboxItemWire[];
+}
+
+export interface WatchlistWire {
+  readonly id: string;
+  readonly userId: string;
+  readonly name: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
 export interface SignalWire {
@@ -71,6 +82,8 @@ export interface UnseenChangeWire {
 
 export interface InstrumentDetailResponse extends DiffFields {
   readonly instrumentId: string;
+  readonly symbol: string;
+  readonly exchange: string | null;
   readonly comparisonStatus: ComparisonStatusValue;
   readonly dataFreshness: string;
   readonly current: EnvelopeWire | null;

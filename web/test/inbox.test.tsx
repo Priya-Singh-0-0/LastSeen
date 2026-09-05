@@ -106,12 +106,14 @@ describe('EvidencePanel (T32)', () => {
   });
 });
 
-describe('Inbox page (T32)', () => {
+describe('Inbox page (T32/T40)', () => {
   const response: InboxResponse = {
     watchlistId: '42',
     items: [
       {
         instrumentId: '101',
+        symbol: 'AAPL',
+        exchange: 'NASDAQ',
         comparisonStatus: 'OK',
         dataFreshness: 'FRESH',
         current: {
@@ -134,6 +136,8 @@ describe('Inbox page (T32)', () => {
       },
       {
         instrumentId: '102',
+        symbol: 'MSFT',
+        exchange: 'NASDAQ',
         comparisonStatus: 'AWAITING_BASELINE',
         dataFreshness: 'UNAVAILABLE',
         current: null,
@@ -145,16 +149,33 @@ describe('Inbox page (T32)', () => {
     ],
   };
 
-  it('renders every item ranked order came in, with its attention band, unseen count, and explanation verbatim', () => {
+  it('renders every item in ranked order, with its attention band, unseen count, and explanation verbatim', () => {
     render(<Inbox data={response} />);
-    const rows = screen.getAllByRole('listitem');
-    expect(rows).toHaveLength(2);
+    // header row + one row per item
+    const rows = screen.getAllByRole('row');
+    expect(rows).toHaveLength(response.items.length + 1);
     expect(screen.getByText('URGENT')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(screen.getByText(/\b3\b/)).toBeInTheDocument();
     expect(
       screen.getByText('AAPL moved sharply on high volume, up 4.20% since you last checked.'),
     ).toBeInTheDocument();
-    expect(screen.getByText('4.20')).toBeInTheDocument();
+    expect(screen.getAllByText(/4\.20/).length).toBeGreaterThan(0);
+  });
+
+  it('renders items in the exact order the API returned them, with no client-side re-sort', () => {
+    // A response deliberately not in band order (QUIET/URGENT ahead of the MINOR item) — if
+    // the UI ever re-sorted by band, this order would change.
+    const unsorted: InboxResponse = {
+      watchlistId: '7',
+      items: [
+        { ...response.items[0]!, instrumentId: 'z', symbol: 'ZETA', maxUnseenBand: 'QUIET' },
+        { ...response.items[0]!, instrumentId: 'a', symbol: 'ALPHA', maxUnseenBand: 'URGENT' },
+        { ...response.items[0]!, instrumentId: 'm', symbol: 'MID', maxUnseenBand: 'MINOR' },
+      ],
+    };
+    render(<Inbox data={unsorted} />);
+    const symbolCells = screen.getAllByText(/ZETA|ALPHA|MID/);
+    expect(symbolCells.map((el) => el.textContent)).toEqual(['ZETA', 'ALPHA', 'MID']);
   });
 
   it('renders the warming placeholder for an item with no market state, performing no arithmetic', () => {
@@ -163,10 +184,58 @@ describe('Inbox page (T32)', () => {
     expect(screen.getByText('Still warming up — nothing to compare yet.')).toBeInTheDocument();
   });
 
-  it('calls onSelectInstrument with the instrument id when a row is activated', () => {
+  it('keeps a STALE item present in the DOM, dimmed and labelled rather than hidden', () => {
+    const withStale: InboxResponse = {
+      watchlistId: '9',
+      items: [
+        {
+          ...response.items[0]!,
+          instrumentId: '999',
+          symbol: 'STLE',
+          dataFreshness: 'STALE',
+          current: { ...response.items[0]!.current!, dataFreshness: 'STALE' },
+        },
+      ],
+    };
+    render(<Inbox data={withStale} />);
+    expect(screen.getByText('STLE')).toBeInTheDocument();
+    expect(screen.getByText('STALE')).toBeInTheDocument();
+  });
+
+  it('renders "Can\'t compare" with no percentage for a suppressed corporate-action comparison', () => {
+    const suppressedItem: InboxResponse = {
+      watchlistId: '9',
+      items: [
+        {
+          instrumentId: '55',
+          symbol: 'SPLT',
+          exchange: null,
+          comparisonStatus: 'SUPPRESSED_CORPORATE_ACTION',
+          dataFreshness: 'FRESH',
+          current: response.items[0]!.current,
+          unseenCount: 0,
+          maxUnseenBand: null,
+          maxUnseenScore: null,
+          explanation: 'A stock split affected this instrument.',
+        },
+      ],
+    };
+    render(<Inbox data={suppressedItem} />);
+    expect(screen.getByText(/can't compare/i)).toBeInTheDocument();
+    expect(screen.queryByText('4.20')).not.toBeInTheDocument();
+  });
+
+  it('calls onSelectInstrument with the instrument id when a row is clicked', () => {
     let selected: string | null = null;
     render(<Inbox data={response} onSelectInstrument={(id) => (selected = id)} />);
-    fireEvent.click(screen.getAllByRole('listitem')[0]!);
+    fireEvent.click(screen.getAllByRole('row')[1]!);
+    expect(selected).toBe('101');
+  });
+
+  it('activates a row via the Enter key, not just click', () => {
+    let selected: string | null = null;
+    render(<Inbox data={response} onSelectInstrument={(id) => (selected = id)} />);
+    fireEvent.keyDown(screen.getAllByRole('row')[1]!, { key: 'Enter' });
     expect(selected).toBe('101');
   });
 
@@ -179,6 +248,8 @@ describe('Inbox page (T32)', () => {
 describe('InstrumentDetail page (T32)', () => {
   const withUnseen: InstrumentDetailResponse = {
     instrumentId: '101',
+    symbol: 'AAPL',
+    exchange: 'NASDAQ',
     comparisonStatus: 'OK',
     dataFreshness: 'FRESH',
     current: {
@@ -225,7 +296,7 @@ describe('InstrumentDetail page (T32)', () => {
   it('renders the current envelope and since-last-check diff fields verbatim', () => {
     render(<InstrumentDetail data={withUnseen} onAcknowledge={() => {}} />);
     expect(screen.getByText('187.42')).toBeInTheDocument();
-    expect(screen.getAllByText('4.20').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/4\.20/).length).toBeGreaterThan(0);
   });
 
   it('renders the full unseen set via the evidence panel, with no model output present', () => {
@@ -237,7 +308,7 @@ describe('InstrumentDetail page (T32)', () => {
   it('fires acknowledge exactly once when "Mark as read" is clicked', () => {
     let calls = 0;
     render(<InstrumentDetail data={withUnseen} onAcknowledge={() => calls++} />);
-    fireEvent.click(screen.getByRole('button', { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole('button', { name: /as read/i }));
     expect(calls).toBe(1);
   });
 
@@ -251,7 +322,7 @@ describe('InstrumentDetail page (T32)', () => {
   it('does not fire acknowledge twice when the button was already clicked before unmount', () => {
     let calls = 0;
     const { unmount } = render(<InstrumentDetail data={withUnseen} onAcknowledge={() => calls++} />);
-    fireEvent.click(screen.getByRole('button', { name: /mark as read/i }));
+    fireEvent.click(screen.getByRole('button', { name: /as read/i }));
     unmount();
     expect(calls).toBe(1);
   });

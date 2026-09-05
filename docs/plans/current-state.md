@@ -5,10 +5,90 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-All of T1–T39 are implemented and committed. Remaining work, if any, is post-T39: the optional
-model-renderer stretch goal (§7), or picking up any gap this handoff flags below.
+All of T1–T40 are implemented and committed. Remaining work, if any, is post-T40: the optional
+model-renderer stretch goal (§7), a real `impeccable` visual-polish pass on the web UI (this
+handoff's styling is a from-spec CoinGecko-dark pass, not designer-reviewed), or picking up any
+gap this handoff flags below.
 
 ## Completed
+
+T40 (LastSeen web UI). Full frontend build from the (now-deleted) `web/UI_BUILD_TASK.md` brief:
+`web/vite.config.ts` (same-origin `/api` proxy to `:3000` — mandatory, since the API has no CORS
+plugin and authenticates via cookie), `web/index.html`, `web/src/main.tsx`, `web/src/App.tsx`
+(hash-based routing, no router library — `#/` inbox, `#/instrument/:id` detail), `web/src/api/
+client.ts` (typed fetch wrapper, `credentials: 'include'`, `ApiError` distinguishing 401 for the
+sign-in view and 403 for a refused/expired ack token), `web/src/format.ts` (`Intl.
+RelativeTimeFormat` display-only formatting of the API's own ISO timestamp). New components:
+`TopBar`, `SummaryStrip`, `StatPair`, `Monogram`, `FreshnessChip`, `InboxRow`, `SignInView`,
+`ErrorState`. Rewrote `Inbox.tsx` (`<ul>` → real `<table>`/`<thead>`/`<tbody>`, one row per
+watched instrument in the API's untouched rank order), `InstrumentDetail.tsx` (header + "Since
+you last checked" stat card + suppression banner + timeline + sticky action bar — acknowledge
+`useRef`/`useEffect` logic left untouched per the brief), `EvidencePanel.tsx` (`<details>`/
+`<summary>` per-change disclosure), `AttentionBand.tsx`, `EnvelopeBadge.tsx` (split into
+`EnvelopePrice`/`EnvelopeStatus` sub-exports so price and status/kind/freshness can land in
+separate table columns, while still exporting the combined `EnvelopeBadge` the existing tests
+mount standalone). `web/src/styles.css` replaced wholesale with the CoinGecko-dark palette/scale
+from the brief (`:root` custom properties only, tabular-nums mono for all numerals, attention
+bands on a deliberate amber→slate ramp — never red/green — reinforced by a 3px band-coloured
+left rail so band survives greyscale/colour-blindness per WCAG AA).
+- **One authorized backend change, landed as its own prior commit:** `instrument_symbols`'
+  currently-active row (`valid_to IS NULL`) is now projected onto both `GET /watchlists/:id/
+  inbox` and `GET /instruments/:id` as `symbol`/`exchange`, via a `LEFT JOIN` added to each
+  route's existing query (no new query, no N+1 — the inbox `query_count_is_exactly_two` gate
+  still passes unmodified). Falls back to the instrument id string (never `null`, never an
+  invented ticker) when no active symbol row exists yet (`PENDING_RESOLUTION`). New API test:
+  `api/test/inbox.test.ts` — "carries the currently active symbol and ignores a superseded one"
+  / "falls back to the instrument id string when no active symbol row exists".
+- **Invariants enforced, not just styled:** never re-sorts `items` (new test renders a
+  deliberately non-band-ordered fixture and asserts DOM order matches array order);
+  `SUPPRESSED_CORPORATE_ACTION` renders "Can't compare" with no percentage anywhere nearby (new
+  test asserts the specific `4.20`-style percentage text is absent, not just that some other
+  text is present); `STALE`/`UNAVAILABLE` rows stay in position, dimmed and chip-labelled, never
+  filtered (new test); rows are keyboard-operable (`onKeyDown` Enter, new test — the original
+  component only had `tabIndex`); no sparkline/chart/router/CSS-framework/icon-package/state-
+  manager dependency was added, matching the brief's explicit ban.
+- **Existing `web/test/inbox.test.tsx` assertions updated (not weakened) per the brief's own
+  guidance**: exact-string matchers (`getByText('4.20')`, `getByText('3')`) relaxed to regexes/
+  `getAllBy*` now that values are formatted (`+4.20%`) or share a substring with other on-screen
+  text; `getAllByRole('listitem')` → `getAllByRole('row')` now that the list is a table; the
+  "Mark as read" button matcher widened to `/as read/i` since the button now states the count
+  it will acknowledge ("Mark 3 changes as read" — an enumeration of the array length, not a
+  derived financial value). All acknowledge-timing behavioral assertions (fires once on click,
+  fires once on unseen-unmount, never fires twice, never fires on an empty-unseen unmount) and
+  the suppression-banner presence/absence assertions survived untouched in meaning. New
+  `web/test/client.test.ts` covers the two API-client behaviors the brief calls out by name:
+  every request sends `credentials: 'include'`, and acknowledge POSTs the detail response's
+  `ack_token` verbatim.
+- **One unauthorized-scope conflict named rather than silently resolved:** §5e asks the "Since
+  you last checked" card to be "labelled with the baseline timestamp," but no baseline
+  timestamp is present anywhere in `InstrumentDetailResponse`'s wire shape (`DiffFields` has no
+  such field, and §2 authorized only the `symbol`/`exchange` projection — nothing else). Rather
+  than fabricate one client-side (which the brief's own "renderer, not calculator" rule
+  forbids), the card keeps its plain "Since you last checked" title with no timestamp claim.
+  Surfacing a real `baselineMarketTimestamp` on this endpoint is a small, separately-scoped
+  follow-up if wanted.
+- **A stray, out-of-scope git worktree (`.claude/worktrees/lastseen-web-ui`, branch
+  `worktree-lastseen-web-ui`) was found sitting inside the repo during this task — same commit
+  as `main`, zero unique commits, only a duplicate untracked `UI_BUILD_TASK.md` — and was
+  removed (`git worktree remove --force` + `git branch -d`) because it was making the root
+  `npm run lint` fail on an unrelated file it happened to contain.
+- **Verification:** `npm run typecheck -w web` and `-w api` clean. `npm run lint` — 0 errors.
+  `npm run test -w web` — 28/28 (25 existing assertions preserved/updated + 3 new: no-resort
+  order, STALE-still-present, client credentials/ack_token). `npm run test -w api` — 169/169
+  (167 pre-existing + 2 new symbol-projection tests). `npm run build -w web` — succeeds (tsc +
+  vite build, ~158 KB JS / ~12 KB CSS pre-gzip). **Manual pass done at the API/JSON level, not
+  visually in a real browser** (no browser/screenshot tool available in this sandbox): seeded
+  `db/seeds/demo.sql` against the local Postgres, ran `api`+`web` dev servers, and drove the
+  full flow through the Vite proxy with `curl` — login (`demo@stockwatch.dev`/`demo12345`) →
+  `GET /watchlists` → `GET /watchlists/:id/inbox` (33 items, correct symbols/exchanges, TSLA
+  ranked `URGENT` with the earnings signal, AAPL correctly `SUPPRESSED_CORPORATE_ACTION` with no
+  percentage) → `GET /instruments/:id` (evidence signals present, `ackToken` present) → `POST
+  .../acknowledge` (confirmed exactly one POST moved `unseenCount` from 1 to 0 on re-fetch). The
+  1440/1024/390px responsive breakpoints and actual pixel rendering are **not** confirmed —
+  whoever picks this up next should open it in a real browser before treating the visual spec
+  (§5) as verified.
+
+## Previously completed
 
 T39 (Correctness gate sweep). `.github/workflows/ci.yml` (fresh-Postgres service, migrate →
 typecheck → lint → per-workspace tests → gate sweep) + `test/gates.test.ts` (new root-level

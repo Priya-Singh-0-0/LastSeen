@@ -1,5 +1,4 @@
-import { AttentionBand } from '../components/AttentionBand.js';
-import { EnvelopeBadge } from '../components/EnvelopeBadge.js';
+import { InboxRow } from '../components/InboxRow.js';
 import type { InboxResponse } from '../types.js';
 import '../styles.css';
 
@@ -15,31 +14,40 @@ export interface InboxProps {
  */
 export function Inbox({ data, onSelectInstrument }: InboxProps) {
   if (data.items.length === 0) {
-    return <p className="inbox__empty">Nothing on this watchlist yet.</p>;
+    return (
+      <div className="inbox__empty">
+        <p>Nothing on this watchlist yet.</p>
+        <button type="button" className="button button--primary">
+          Add an instrument
+        </button>
+      </div>
+    );
   }
   return (
-    <ul className="inbox">
-      {data.items.map((item) => (
-        <li
-          key={item.instrumentId}
-          role="listitem"
-          className="inbox__row"
-          tabIndex={0}
-          onClick={() => onSelectInstrument?.(item.instrumentId)}
-        >
-          <div className="inbox__row-main">
-            <AttentionBand band={item.maxUnseenBand} />
-            <EnvelopeBadge envelope={item.current} />
-            {item.unseenCount > 0 ? (
-              <span className="inbox__unseen-count">{item.unseenCount}</span>
-            ) : null}
-            {item.percentageChange !== undefined ? (
-              <span className="inbox__percentage-change">{item.percentageChange}</span>
-            ) : null}
-          </div>
-          <p className="inbox__explanation">{item.explanation}</p>
-        </li>
-      ))}
-    </ul>
+    <table className="inbox-table">
+      <thead>
+        <tr>
+          <th className="inbox-table__col-rank">#</th>
+          <th className="inbox-table__col-instrument">Instrument</th>
+          <th className="inbox-table__col-price">Price</th>
+          <th className="inbox-table__col-change">Since you last checked</th>
+          <th className="inbox-table__col-sessions">Sessions</th>
+          <th className="inbox-table__col-attention">Attention</th>
+          <th className="inbox-table__col-unseen">Unseen</th>
+          <th className="inbox-table__col-data">Data</th>
+          <th className="inbox-table__col-explanation">What changed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {data.items.map((item, index) => (
+          <InboxRow
+            key={item.instrumentId}
+            rank={index + 1}
+            item={item}
+            onSelect={(id) => onSelectInstrument?.(id)}
+          />
+        ))}
+      </tbody>
+    </table>
   );
 }
