@@ -123,7 +123,7 @@ describeWithDb('T29 — Checkpoint repository', () => {
     expect(advanced?.baselineCorporateActionVersion).toBe(1);
   });
 
-  it('a replayed acknowledgement (same watermark) is a no-op', async () => {
+  it('ack_replay_is_noop — a replayed acknowledgement (same watermark) is a no-op', async () => {
     const userId = await createUser();
     const instrumentId = await createInstrument();
     await seedMarketState(instrumentId, '50.000000', new Date('2026-01-01T00:00:00Z'));

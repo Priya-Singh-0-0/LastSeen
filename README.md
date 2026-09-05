@@ -38,10 +38,19 @@ npm run dev -w worker
 npm run dev -w web
 ```
 
+## CI (T39)
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`: migrations against a fresh
+Postgres, `typecheck`, `lint` (including the import-boundary rules), then each workspace's
+tests against the same role split used locally (`api` under the restricted `stockwatch_api`
+role, `worker` under the superuser role it writes market facts as), and finally the root
+`test/gates.test.ts` sweep — a checklist that fails if any of the §6 gate table's named tests
+is missing, renamed away from its canonical name, or skipped.
+
 ## Test
 
 ```bash
-npm test                   # all workspaces
+npm test                   # all workspaces + the gate sweep
 npm test -w api            # API only
 npm test -w worker         # worker only
 npm test -w packages/contracts  # contracts only

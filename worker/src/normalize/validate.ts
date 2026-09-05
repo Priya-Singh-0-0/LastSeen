@@ -1,4 +1,4 @@
-import { Decimal, parseDecimal } from '@stockwatch/contracts';
+import type { Decimal } from '@stockwatch/contracts';
 import type { Observation } from '@stockwatch/contracts';
 
 /**

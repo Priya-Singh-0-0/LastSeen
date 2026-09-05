@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  SUPERUSER_DATABASE_URL: postgres://stockwatch:stockwatch@localhost:5432/stockwatch
+  API_DATABASE_URL: postgres://stockwatch_api:stockwatch_api@localhost:5432/stockwatch
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stockwatch
+          POSTGRES_PASSWORD: stockwatch
+          POSTGRES_DB: stockwatch
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stockwatch"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # Fresh-database migration + role grants (T6), before any test touches the DB.
+      - name: Run migrations against a fresh database
+        run: npm run migrate -w api
+        env:
+          DATABASE_URL: ${{ env.SUPERUSER_DATABASE_URL }}
+
+      - run: npm run typecheck
+      - run: npm run lint
+
+      # api tests run under the restricted stockwatch_api role (matches production),
+      # with a second superuser pool for DB-owned fixture setup — same split as local dev.
+      - name: api tests
+        run: npm test -w api
+        env:
+          DATABASE_URL: ${{ env.API_DATABASE_URL }}
+          TEST_DATABASE_URL: ${{ env.SUPERUSER_DATABASE_URL }}
+
+      # worker owns and writes market-fact tables directly; no restricted role to test against.
+      - name: worker tests
+        run: npm test -w worker
+        env:
+          DATABASE_URL: ${{ env.SUPERUSER_DATABASE_URL }}
+
+      - name: contracts tests
+        run: npm test -w packages/contracts
+        env:
+          DATABASE_URL: ${{ env.SUPERUSER_DATABASE_URL }}
+
+      - name: web tests
+        run: npm test -w web
+
+      # §6 gate table completeness — fails if any named gate test is missing or skipped.
+      - name: correctness gate sweep
+        run: npx vitest run

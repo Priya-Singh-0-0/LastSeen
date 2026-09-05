@@ -230,7 +230,7 @@ describe('the eight detectors (T21)', () => {
 
   // ── 7 & 8. Event predicates fire regardless of INSUFFICIENT_HISTORY ──
   describe('event predicates under INSUFFICIENT_HISTORY', () => {
-    it('price/volume predicates emit nothing under INSUFFICIENT_HISTORY', () => {
+    it('insufficient_history_emits_no_price_signals — price/volume predicates emit nothing under INSUFFICIENT_HISTORY', () => {
       const input = makeInput({ features: INSUFFICIENT_HISTORY });
       expect(detectVolatilityAdjustedMove(input)).toBeUndefined();
       expect(detectLargeAbsoluteMove(input)).toBeUndefined();

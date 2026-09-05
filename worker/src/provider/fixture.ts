@@ -2,11 +2,8 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDecimal, toSessionDate } from '@stockwatch/contracts';
-import type { Observation, DailyBar, UtcTimestamp } from '@stockwatch/contracts';
+import type { Observation, DailyBar } from '@stockwatch/contracts';
 import type { ProviderAdapter } from './index.js';
-import {
-  MarketStatus, ValueKind, DataFreshness,
-} from '@stockwatch/contracts';
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

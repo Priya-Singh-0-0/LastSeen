@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import pg from 'pg';
-import { createPool, query } from '../src/db.js';
+import { createPool } from '../src/db.js';
 import { claimJob, completeJob, failJob, drainOne } from '../src/jobs/queue.js';
 import { buildHandlers } from '../src/jobs/handlers.js';
 
@@ -68,7 +68,7 @@ describeWithDb('T13 — job queue', () => {
   });
 
   it('completeJob sets job to DONE', async () => {
-    const id = await insertJob('backfill_bars', `ik-done-${Date.now()}`);
+    await insertJob('backfill_bars', `ik-done-${Date.now()}`);
     const job = await claimJob(client);
     expect(job).not.toBeNull();
     await completeJob(client, job!.id);
@@ -80,7 +80,7 @@ describeWithDb('T13 — job queue', () => {
   });
 
   it('failJob with attempts < max resets to PENDING with backoff', async () => {
-    const id = await insertJob('resolve_instrument', `ik-fail-${Date.now()}`);
+    await insertJob('resolve_instrument', `ik-fail-${Date.now()}`);
     const job = await claimJob(client);
     expect(job).not.toBeNull();
 
@@ -93,7 +93,7 @@ describeWithDb('T13 — job queue', () => {
   });
 
   it('failJob at max_attempts marks job as FAILED permanently', async () => {
-    const id = await insertJob('resolve_instrument', `ik-maxfail-${Date.now()}`);
+    await insertJob('resolve_instrument', `ik-maxfail-${Date.now()}`);
     const job = await claimJob(client);
     expect(job).not.toBeNull();
 

@@ -8,7 +8,7 @@ import {
   corporateActionDedupeKey,
 } from '../src/signals/dedupe.js';
 
-describe('dedupe keys', () => {
+describe('dedupe_keys_are_deterministic_and_class_correct', () => {
   it('same inputs produce the same key', () => {
     const input = { signalType: SignalType.LARGE_ABSOLUTE_MOVE as const, sessionDate: toSessionDate('2024-07-02') };
     expect(priceSignalDedupeKey(input)).toBe(priceSignalDedupeKey(input));
