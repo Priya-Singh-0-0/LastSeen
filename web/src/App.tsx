@@ -6,7 +6,7 @@ import type { AddInstrumentStatus } from './components/AddInstrumentForm.js';
 import { ErrorState } from './components/ErrorState.js';
 import { SignInView } from './components/SignInView.js';
 import { SummaryStrip } from './components/SummaryStrip.js';
-import { TopBar } from './components/TopBar.js';
+import { TopBar, WatchlistNameForm } from './components/TopBar.js';
 import { Inbox } from './pages/Inbox.js';
 import { InstrumentDetail } from './pages/InstrumentDetail.js';
 import type { InboxResponse, InstrumentDetailResponse, WatchlistWire } from './types.js';
@@ -46,18 +46,20 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const loadWatchlists = useCallback(async () => {
+  const loadWatchlists = useCallback(async (): Promise<readonly WatchlistWire[] | undefined> => {
     try {
       const wls = await api.getWatchlists();
       setWatchlists(wls);
       setSelectedWatchlistId((current) => current ?? wls[0]?.id ?? null);
       setSignedIn(true);
+      return wls;
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setSignedIn(false);
       } else {
         setLoadError(err instanceof Error ? err.message : 'Failed to load watchlists');
       }
+      return undefined;
     }
   }, []);
 
@@ -185,6 +187,43 @@ export function App() {
     }
   }
 
+  async function handleCreateWatchlist(name: string) {
+    try {
+      const created = await api.createWatchlist(name);
+      await loadWatchlists();
+      // The 201 body carries the new id — select it directly rather than matching by name.
+      setSelectedWatchlistId(created.id);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to create watchlist');
+      throw err;
+    }
+  }
+
+  async function handleRenameWatchlist(id: string, name: string) {
+    try {
+      // PATCH returns only { ok: true }, not the updated row — refetch to see the new name.
+      await api.renameWatchlist(id, name);
+      await loadWatchlists();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to rename watchlist');
+      throw err;
+    }
+  }
+
+  async function handleDeleteWatchlist(id: string) {
+    try {
+      await api.deleteWatchlist(id);
+      const remaining = await loadWatchlists();
+      if (selectedWatchlistId === id) {
+        setSelectedWatchlistId(remaining?.[0]?.id ?? null);
+        setInbox(null);
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to delete watchlist');
+      throw err;
+    }
+  }
+
   if (signedIn === null) return null;
   if (signedIn === false) {
     return (
@@ -225,8 +264,18 @@ export function App() {
         onSelectWatchlist={setSelectedWatchlistId}
         lastCheckedAt={lastCheckedAt}
         onSignOut={() => void handleSignOut()}
+        onCreateWatchlist={handleCreateWatchlist}
+        onRenameWatchlist={handleRenameWatchlist}
+        onDeleteWatchlist={handleDeleteWatchlist}
       />
-      {inbox ? (
+      {watchlists.length === 0 ? (
+        <div className="watchlist-empty-state">
+          <p className="watchlist-empty-state__message">
+            You don&apos;t have a watchlist yet. Create one to start tracking instruments.
+          </p>
+          <WatchlistNameForm submitLabel="Create watchlist" onSubmit={handleCreateWatchlist} />
+        </div>
+      ) : inbox ? (
         <>
           <SummaryStrip items={inbox.items} />
           <AddInstrumentForm

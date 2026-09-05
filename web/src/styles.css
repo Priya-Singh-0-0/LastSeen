@@ -358,6 +358,50 @@ button {
   color: var(--text);
 }
 
+.watchlist-name-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.watchlist-name-form__input {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text);
+}
+.watchlist-name-form__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.watchlist-delete-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.watchlist-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+.watchlist-empty-state__message {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
 .summary-strip {
   min-height: 72px;
   display: flex;
