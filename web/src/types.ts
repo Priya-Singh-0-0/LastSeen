@@ -90,3 +90,14 @@ export interface InstrumentDetailResponse extends DiffFields {
   readonly unseenChanges: readonly UnseenChangeWire[];
   readonly ackToken: string;
 }
+
+export interface WatchlistItemWire {
+  readonly id: string;
+  readonly instrumentId: string;
+  readonly addedAt: string;
+}
+
+export interface AddItemResultWire {
+  readonly instrumentId: string;
+  readonly state: 'WARMING' | 'READY';
+}

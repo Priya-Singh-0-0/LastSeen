@@ -1,4 +1,10 @@
-import type { InboxResponse, InstrumentDetailResponse, WatchlistWire } from '../types.js';
+import type {
+  AddItemResultWire,
+  InboxResponse,
+  InstrumentDetailResponse,
+  WatchlistItemWire,
+  WatchlistWire,
+} from '../types.js';
 
 /**
  * A 401 is a distinct, expected outcome (no session yet) — never thrown as a generic error.
@@ -17,8 +23,8 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}) as Record<string, unknown>);
@@ -54,4 +60,38 @@ export function acknowledge(instrumentId: string, ackToken: string): Promise<voi
     method: 'POST',
     body: JSON.stringify({ ack_token: ackToken }),
   });
+}
+
+export function register(email: string, password: string): Promise<{ id: string }> {
+  return request('/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) });
+}
+
+export function createWatchlist(name: string): Promise<WatchlistWire> {
+  return request('/watchlists', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export function renameWatchlist(id: string, name: string): Promise<{ ok: true }> {
+  return request(`/watchlists/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+}
+
+export function deleteWatchlist(id: string): Promise<void> {
+  return request(`/watchlists/${id}`, { method: 'DELETE' });
+}
+
+export function getWatchlistItems(watchlistId: string): Promise<readonly WatchlistItemWire[]> {
+  return request(`/watchlists/${watchlistId}/items`);
+}
+
+export function addWatchlistItem(
+  watchlistId: string,
+  symbol: string,
+): Promise<AddItemResultWire> {
+  return request(`/watchlists/${watchlistId}/items`, {
+    method: 'POST',
+    body: JSON.stringify({ symbol }),
+  });
+}
+
+export function removeWatchlistItem(watchlistId: string, itemId: string): Promise<void> {
+  return request(`/watchlists/${watchlistId}/items/${itemId}`, { method: 'DELETE' });
 }
