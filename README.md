@@ -47,6 +47,19 @@ npm test -w worker         # worker only
 npm test -w packages/contracts  # contracts only
 ```
 
+## Alpaca capability verification (T37)
+
+Verified live against a paper-trading account (2026-09), combining the [Alpaca market-data docs](https://docs.alpaca.markets/us/docs/getting-started-with-alpaca-market-data) with direct API calls through the official `@alpacahq/alpaca-trade-api` SDK:
+
+| Capability | Available? | Endpoint | Notes |
+|---|---|---|---|
+| Snapshots / latest quote | ✓ | `GET /v2/stocks/snapshots` | `iex` feed on paper tier |
+| Historical daily bars | ✓ | `GET /v2/stocks/bars` | via `getStockBarsFor` |
+| Corporate actions (splits) | ✓ | `GET /v1/corporate-actions` | confirmed against AAPL's real 2020 4-for-1 split |
+| Earnings / calendar events | ✗ | none | no such endpoint exists; the only historically-adjacent one (`corporate_actions/announcements`) is deprecated |
+
+Because there is no earnings/calendar-events endpoint at any tier, `EARNINGS_RELEASED` events use T38's seeded fallback, with `source` always marked `seeded` — never silently faked as live data.
+
 ## Workspace structure
 
 ```

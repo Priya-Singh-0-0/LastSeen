@@ -1,7 +1,9 @@
 /**
  * T12 — instrument_tracking maintenance tests (INV-1, INV-3)
  *
- * Requires a live DB: DATABASE_URL env var.
+ * Requires a live DB: DATABASE_URL (stockwatch_api role, drives the HTTP calls under test)
+ * and TEST_DATABASE_URL (superuser, used only to clean up the jobs this suite enqueues —
+ * the API role has no DELETE on jobs per T6).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
@@ -16,25 +18,35 @@ import { getPool, _resetPool } from '../src/db.js';
 pg.types.setTypeParser(1700 as pg.TypeId, (v: string) => v);
 
 const DATABASE_URL = process.env.DATABASE_URL;
-const describeWithDb = DATABASE_URL ? describe : describe.skip;
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
+const describeWithDb = DATABASE_URL && TEST_DATABASE_URL ? describe : describe.skip;
 
 describeWithDb('T12 — instrument_tracking maintenance', () => {
   let pool: pg.Pool;
+  let setupPool: pg.Pool; // superuser — the API role has no DELETE on jobs (T6), used only for cleanup
   let app: ReturnType<typeof Fastify>;
+  let testsStartedAt: Date;
 
   beforeAll(async () => {
     _resetPool();
     pool = getPool(DATABASE_URL!);
+    setupPool = new pg.Pool({ connectionString: TEST_DATABASE_URL! });
     app = Fastify({ logger: false });
     await app.register(fastifyCookie);
     await registerAuthRoutes(app, pool);
     await registerWatchlistRoutes(app, pool);
     await app.ready();
+    testsStartedAt = new Date();
   });
 
   afterAll(async () => {
+    // Adding a watchlist item enqueues real resolve_instrument/backfill_bars jobs (INV-1) —
+    // this suite doesn't own job-queue lifecycle (that's worker/test/jobs.queue.test.ts), so
+    // clean up whatever it created rather than leaving rows for the worker's tests to trip over.
+    await setupPool.query('DELETE FROM jobs WHERE created_at >= $1', [testsStartedAt]);
     await app.close();
     await pool.end();
+    await setupPool.end();
     _resetPool();
   });
 

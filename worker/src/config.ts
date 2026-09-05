@@ -6,6 +6,8 @@ const configSchema = z.object({
   ALPACA_API_SECRET_KEY: z.string().min(1, 'ALPACA_API_SECRET_KEY is required'),
   NODE_ENV:              z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL:             z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+  // Paper accounts get iex by default (T37 capability verification); override for a live sip/otc feed.
+  ALPACA_FEED:           z.enum(['iex', 'sip', 'delayed_sip', 'otc']).default('iex'),
 });
 
 export type WorkerConfig = z.infer<typeof configSchema>;
