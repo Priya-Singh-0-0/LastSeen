@@ -210,6 +210,49 @@ describeWithDb('T31 — GET /watchlists/:id/inbox', () => {
     expect(item.explanation).toContain(item.percentageChange);
   });
 
+  it('carries the currently active symbol and ignores a superseded one', async () => {
+    const { token } = await registerAndLogin('symbol');
+    const wlId = await createWatchlist(token);
+
+    const instrumentId = await createInstrument(null);
+    await addToWatchlist(wlId, instrumentId);
+    await setupPool.query(
+      `INSERT INTO instrument_symbols (instrument_id, symbol, exchange, valid_from, valid_to)
+       VALUES ($1, 'OLD', 'NASDAQ', NOW() - INTERVAL '2 days', NOW() - INTERVAL '1 day')`,
+      [instrumentId],
+    );
+    await setupPool.query(
+      `INSERT INTO instrument_symbols (instrument_id, symbol, exchange, valid_from)
+       VALUES ($1, 'NEW', 'NYSE', NOW() - INTERVAL '1 day')`,
+      [instrumentId],
+    );
+
+    const res = await app.inject({
+      method: 'GET', url: `/watchlists/${wlId}/inbox`,
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as { items: Array<{ symbol: string; exchange: string | null }> };
+    expect(body.items[0].symbol).toBe('NEW');
+    expect(body.items[0].exchange).toBe('NYSE');
+  });
+
+  it('falls back to the instrument id string when no active symbol row exists (PENDING_RESOLUTION)', async () => {
+    const { token } = await registerAndLogin('nosymbol');
+    const wlId = await createWatchlist(token);
+
+    const instrumentId = await createInstrument(null);
+    await addToWatchlist(wlId, instrumentId);
+
+    const res = await app.inject({
+      method: 'GET', url: `/watchlists/${wlId}/inbox`,
+      cookies: { [SESSION_COOKIE_NAME]: token },
+    });
+    const body = JSON.parse(res.body) as { items: Array<{ symbol: string; exchange: string | null }> };
+    expect(body.items[0].symbol).toBe(instrumentId);
+    expect(body.items[0].exchange).toBe(null);
+  });
+
   it('makes zero outbound network calls (no provider adapter import possible from the API)', async () => {
     // Structural guarantee: the API package has no Alpaca SDK dependency at all (INV-2),
     // so this route cannot reach a market provider even in principle.

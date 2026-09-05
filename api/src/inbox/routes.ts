@@ -40,6 +40,8 @@ const UNSEEN_LIMIT_PER_INSTRUMENT = 20;
 interface ItemJoinRow {
   instrument_id: string | null;
   corporate_action_version: number | null;
+  symbol: string | null;
+  exchange: string | null;
   price: string | null;
   currency: string | null;
   market_timestamp: Date | null;
@@ -73,6 +75,7 @@ async function fetchItemJoin(pool: Pool, watchlistId: bigint, userId: bigint): P
     `SELECT
        wi.instrument_id,
        i.corporate_action_version,
+       isym.symbol, isym.exchange,
        ims.price, ims.currency, ims.market_timestamp, ims.ingested_at, ims.source,
        ims.market_status, ims.value_kind, ims.data_freshness, ims.precision_hint,
        c.seen_through_publication_seq, c.baseline_price, c.baseline_market_timestamp,
@@ -80,6 +83,7 @@ async function fetchItemJoin(pool: Pool, watchlistId: bigint, userId: bigint): P
      FROM watchlists wl
      LEFT JOIN watchlist_items wi ON wi.watchlist_id = wl.id
      LEFT JOIN instruments i ON i.id = wi.instrument_id
+     LEFT JOIN instrument_symbols isym ON isym.instrument_id = i.id AND isym.valid_to IS NULL
      LEFT JOIN instrument_market_state ims ON ims.instrument_id = i.id
      LEFT JOIN user_instrument_checkpoints c ON c.instrument_id = i.id AND c.user_id = $2
      WHERE wl.id = $1 AND wl.user_id = $2`,
@@ -115,6 +119,8 @@ async function fetchUnseenChanges(
 
 interface ComposedItem {
   instrumentId: string;
+  symbol: string;
+  exchange: string | null;
   comparisonStatus: ComparisonStatus;
   dataFreshness: string;
   current: Record<string, unknown> | null;
@@ -266,6 +272,8 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
 
       const composed: ComposedItem = {
         instrumentId: row.instrument_id,
+        symbol: row.symbol ?? row.instrument_id,
+        exchange: row.exchange,
         comparisonStatus,
         dataFreshness,
         current,
@@ -291,6 +299,8 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
       watchlistId: String(watchlistId),
       items: ranked.map((r) => ({
         instrumentId: r.item.instrumentId,
+        symbol: r.item.symbol,
+        exchange: r.item.exchange,
         comparisonStatus: r.item.comparisonStatus,
         dataFreshness: r.item.dataFreshness,
         current: r.item.current,

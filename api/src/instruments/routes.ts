@@ -26,15 +26,26 @@ function parseBigInt(val: unknown): bigint | null {
 
 interface InstrumentRow {
   corporateActionVersion: number;
+  symbol: string;
+  exchange: string | null;
 }
 
 async function getInstrument(pool: Pool, instrumentId: bigint): Promise<InstrumentRow | null> {
-  const { rows } = await query<{ corporate_action_version: number }>(
+  const { rows } = await query<{ corporate_action_version: number; symbol: string | null; exchange: string | null }>(
     pool,
-    `SELECT corporate_action_version FROM instruments WHERE id = $1`,
+    `SELECT i.corporate_action_version, isym.symbol, isym.exchange
+     FROM instruments i
+     LEFT JOIN instrument_symbols isym ON isym.instrument_id = i.id AND isym.valid_to IS NULL
+     WHERE i.id = $1`,
     [instrumentId],
   );
-  return rows[0] ? { corporateActionVersion: rows[0].corporate_action_version } : null;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    corporateActionVersion: row.corporate_action_version,
+    symbol: row.symbol ?? String(instrumentId),
+    exchange: row.exchange,
+  };
 }
 
 /** True if the user has this instrument on at least one of their watchlists (INV-15). */
@@ -256,6 +267,8 @@ export async function registerInstrumentRoutes(
 
     return reply.send({
       instrumentId: String(instrumentId),
+      symbol: instrument.symbol,
+      exchange: instrument.exchange,
       comparisonStatus,
       dataFreshness,
       current: currentWire,
