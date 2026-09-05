@@ -78,4 +78,31 @@ describe('TopBar (T-UI-4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalled();
   });
+
+  it('on a failed create, keeps the form open, preserves the typed name, and shows the error inline', async () => {
+    const onCreateWatchlist = vi.fn().mockRejectedValue(new Error('A watchlist with that name already exists.'));
+    renderTopBar({ onCreateWatchlist });
+
+    fireEvent.click(screen.getByRole('button', { name: 'New watchlist' }));
+    const input = screen.getByLabelText('Watchlist name');
+    fireEvent.change(input, { target: { value: 'Growth' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await vi.waitFor(() => expect(onCreateWatchlist).toHaveBeenCalledWith('Growth'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('A watchlist with that name already exists.');
+    expect(screen.getByLabelText('Watchlist name')).toHaveValue('Growth');
+  });
+
+  it('on a failed delete, keeps the confirm open and shows the error inline instead of losing the confirm state', async () => {
+    const onDeleteWatchlist = vi.fn().mockRejectedValue(new Error('Cannot delete your only watchlist.'));
+    renderTopBar({ watchlists: [watchlist('wl-1', 'Core Holdings')], selectedWatchlistId: 'wl-1', onDeleteWatchlist });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await vi.waitFor(() => expect(onDeleteWatchlist).toHaveBeenCalledWith('wl-1'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot delete your only watchlist.');
+    // The confirm is still showing, naming the watchlist — not replaced by anything else.
+    expect(screen.getByText(/Delete 'Core Holdings'\?/)).toBeInTheDocument();
+  });
 });

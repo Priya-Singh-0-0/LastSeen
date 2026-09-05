@@ -187,40 +187,29 @@ export function App() {
     }
   }
 
+  // These three intentionally do not catch: a failure (e.g. a 409 duplicate name) is a routine,
+  // recoverable outcome that TopBar's inline form/confirm displays locally by catching the
+  // rejection itself. Routing it through the app-wide `loadError` would unmount TopBar — and the
+  // very form showing the error — for what should be an in-place validation message.
   async function handleCreateWatchlist(name: string) {
-    try {
-      const created = await api.createWatchlist(name);
-      await loadWatchlists();
-      // The 201 body carries the new id — select it directly rather than matching by name.
-      setSelectedWatchlistId(created.id);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to create watchlist');
-      throw err;
-    }
+    const created = await api.createWatchlist(name);
+    await loadWatchlists();
+    // The 201 body carries the new id — select it directly rather than matching by name.
+    setSelectedWatchlistId(created.id);
   }
 
   async function handleRenameWatchlist(id: string, name: string) {
-    try {
-      // PATCH returns only { ok: true }, not the updated row — refetch to see the new name.
-      await api.renameWatchlist(id, name);
-      await loadWatchlists();
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to rename watchlist');
-      throw err;
-    }
+    // PATCH returns only { ok: true }, not the updated row — refetch to see the new name.
+    await api.renameWatchlist(id, name);
+    await loadWatchlists();
   }
 
   async function handleDeleteWatchlist(id: string) {
-    try {
-      await api.deleteWatchlist(id);
-      const remaining = await loadWatchlists();
-      if (selectedWatchlistId === id) {
-        setSelectedWatchlistId(remaining?.[0]?.id ?? null);
-        setInbox(null);
-      }
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to delete watchlist');
-      throw err;
+    await api.deleteWatchlist(id);
+    const remaining = await loadWatchlists();
+    if (selectedWatchlistId === id) {
+      setSelectedWatchlistId(remaining?.[0]?.id ?? null);
+      setInbox(null);
     }
   }
 

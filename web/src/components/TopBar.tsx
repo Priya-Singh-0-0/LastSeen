@@ -12,24 +12,27 @@ export interface WatchlistNameFormProps {
 
 /**
  * The shared inline-form shape for both creating and renaming a watchlist (brief: "the same
- * shape of inline form"). A failed submit is swallowed here — same convention as
- * AddInstrumentForm — so the input value is preserved for correction; the parent surfaces the
- * failure globally (App's `loadError`).
+ * shape of inline form"). A failed submit keeps the form open with the typed value intact and
+ * shows the failure locally (mirroring AddInstrumentForm's inline `status` treatment) — it must
+ * never rely on an app-wide error state that would unmount this very form.
  */
 export function WatchlistNameForm({ initialValue = '', submitLabel, onSubmit, onCancel }: WatchlistNameFormProps) {
   const [value, setValue] = useState(initialValue);
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = value.trim();
     if (name === '') return;
     setPending(true);
+    setError(null);
     try {
       await onSubmit(name);
       setValue('');
-    } catch {
-      // Preserve the typed value so the user can retry; the parent surfaces the failure.
+    } catch (err) {
+      // Preserve the typed value so the user can retry; show the failure right here.
+      setError(err instanceof Error ? err.message : 'Failed to save the watchlist name.');
     } finally {
       setPending(false);
     }
@@ -54,6 +57,11 @@ export function WatchlistNameForm({ initialValue = '', submitLabel, onSubmit, on
         <button type="button" className="button" onClick={onCancel} disabled={pending}>
           Cancel
         </button>
+      ) : null}
+      {error !== null ? (
+        <p className="watchlist-name-form__error" role="alert">
+          {error}
+        </p>
       ) : null}
     </form>
   );
@@ -83,6 +91,7 @@ export function TopBar({
   onDeleteWatchlist,
 }: TopBarProps) {
   const [openForm, setOpenForm] = useState<OpenForm>('none');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const selected = watchlists.find((wl) => wl.id === selectedWatchlistId);
 
   async function handleCreateSubmit(name: string) {
@@ -96,13 +105,25 @@ export function TopBar({
     setOpenForm('none');
   }
 
+  function openDeleteConfirm() {
+    setDeleteError(null);
+    setOpenForm('delete');
+  }
+
+  function cancelDeleteConfirm() {
+    setDeleteError(null);
+    setOpenForm('none');
+  }
+
   async function handleDeleteConfirm() {
     if (!selected) return;
+    setDeleteError(null);
     try {
       await onDeleteWatchlist(selected.id);
       setOpenForm('none');
-    } catch {
-      // Parent surfaces the failure globally; keep the confirm open so the user can retry.
+    } catch (err) {
+      // Keep the confirm open — with the failure shown right here — so the user can retry.
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete the watchlist.');
     }
   }
 
@@ -147,17 +168,22 @@ export function TopBar({
           ) : null}
           {selected ? (
             openForm === 'delete' ? (
-              <span className="watchlist-delete-confirm" role="alert">
+              <span className="watchlist-delete-confirm">
                 <span>Delete &apos;{selected.name}&apos;? This removes the watchlist, not your account.</span>
                 <button type="button" className="button" onClick={() => void handleDeleteConfirm()}>
                   Delete
                 </button>
-                <button type="button" className="button" onClick={() => setOpenForm('none')}>
+                <button type="button" className="button" onClick={cancelDeleteConfirm}>
                   Cancel
                 </button>
+                {deleteError !== null ? (
+                  <span className="watchlist-delete-confirm__error" role="alert">
+                    {deleteError}
+                  </span>
+                ) : null}
               </span>
             ) : (
-              <button type="button" className="button" onClick={() => setOpenForm('delete')}>
+              <button type="button" className="button" onClick={openDeleteConfirm}>
                 Delete
               </button>
             )
