@@ -284,7 +284,7 @@ describe('Inbox page (T32/T40)', () => {
         />,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
-      fireEvent.click(within(rowForSymbol('AAPL')).getByRole('button', { name: 'Yes' }));
+      fireEvent.click(within(rowForSymbol('AAPL')).getByRole('button', { name: 'Yes, remove AAPL' }));
       expect(removed).toBe('101');
       expect(removeCalls).toBe(1);
     });
@@ -293,10 +293,39 @@ describe('Inbox page (T32/T40)', () => {
       let removed: string | null = null;
       render(<Inbox data={response} onRemoveInstrument={(id) => (removed = id)} />);
       fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
-      fireEvent.click(within(rowForSymbol('AAPL')).getByRole('button', { name: 'Cancel' }));
+      fireEvent.click(within(rowForSymbol('AAPL')).getByRole('button', { name: 'Cancel removing AAPL' }));
       expect(removed).toBeNull();
       expect(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' })).toBeInTheDocument();
       expect(screen.queryByText('Remove?')).not.toBeInTheDocument();
+    });
+
+    it('does not activate the row (navigate) when Enter is pressed on the remove button itself', () => {
+      let selected: string | null = null;
+      render(<Inbox data={response} onSelectInstrument={(id) => (selected = id)} />);
+      const removeButton = screen.getByRole('button', { name: 'Remove AAPL from this watchlist' });
+      fireEvent.keyDown(removeButton, { key: 'Enter' });
+      expect(selected).toBeNull();
+    });
+
+    it('does not let a keydown on "Yes" or "Cancel" bubble up to navigate the row', () => {
+      let removed: string | null = null;
+      let selected: string | null = null;
+      render(
+        <Inbox
+          data={response}
+          onRemoveInstrument={(id) => (removed = id)}
+          onSelectInstrument={(id) => (selected = id)}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
+      const yesButton = within(rowForSymbol('AAPL')).getByRole('button', { name: 'Yes, remove AAPL' });
+      const cancelButton = within(rowForSymbol('AAPL')).getByRole('button', { name: 'Cancel removing AAPL' });
+      fireEvent.keyDown(yesButton, { key: 'Enter' });
+      fireEvent.keyDown(cancelButton, { key: ' ' });
+      // Neither keydown should have bubbled to the row and triggered navigation via activate().
+      expect(selected).toBeNull();
+      // And the row's own handler must not have run onRemove either (only the button's own click handler may).
+      expect(removed).toBeNull();
     });
   });
 });

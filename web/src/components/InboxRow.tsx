@@ -29,6 +29,10 @@ export function InboxRow({ rank, item, onSelect, onRemove }: InboxRowProps) {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
+    // Only the row itself should activate on Enter/Space — a keydown that bubbled up from a
+    // descendant control (e.g. the remove button, or "Yes"/"Cancel") must be left alone so that
+    // control's own default behavior/handler runs instead of navigating away.
+    if (event.target !== event.currentTarget) return;
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       activate();
@@ -111,10 +115,20 @@ export function InboxRow({ rank, item, onSelect, onRemove }: InboxRowProps) {
         {confirmingRemove ? (
           <span className="inbox-row__confirm-remove">
             <span>Remove?</span>
-            <button type="button" className="button" onClick={handleConfirmRemove}>
+            <button
+              type="button"
+              className="button"
+              aria-label={`Yes, remove ${item.symbol}`}
+              onClick={handleConfirmRemove}
+            >
               Yes
             </button>
-            <button type="button" className="button" onClick={handleCancelRemove}>
+            <button
+              type="button"
+              className="button"
+              aria-label={`Cancel removing ${item.symbol}`}
+              onClick={handleCancelRemove}
+            >
               Cancel
             </button>
           </span>

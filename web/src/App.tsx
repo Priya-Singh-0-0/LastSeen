@@ -139,6 +139,11 @@ export function App() {
     setInbox(null);
     setWatchlists([]);
     setSelectedWatchlistId(null);
+    setItemIdByInstrumentId(new Map());
+    setAddStatus({ kind: 'idle' });
+    setLastCheckedAt(null);
+    setDetail(null);
+    setLoadError(null);
   }
 
   async function handleAcknowledge() {
@@ -183,7 +188,13 @@ export function App() {
       await api.removeWatchlistItem(selectedWatchlistId, itemId);
       await loadInbox(selectedWatchlistId);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to remove instrument');
+      // Report inline like every other mutation on this screen (add, watchlist create/rename/
+      // delete) rather than via the app-wide `loadError`, which would unmount TopBar — and its
+      // Sign out button — for what is a routine, recoverable failure.
+      setAddStatus({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Failed to remove instrument',
+      });
     }
   }
 
@@ -250,7 +261,10 @@ export function App() {
       <TopBar
         watchlists={watchlists}
         selectedWatchlistId={selectedWatchlistId ?? ''}
-        onSelectWatchlist={setSelectedWatchlistId}
+        onSelectWatchlist={(id) => {
+          setSelectedWatchlistId(id);
+          setAddStatus({ kind: 'idle' });
+        }}
         lastCheckedAt={lastCheckedAt}
         onSignOut={() => void handleSignOut()}
         onCreateWatchlist={handleCreateWatchlist}
