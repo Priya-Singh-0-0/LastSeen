@@ -4,7 +4,7 @@
  * Asserts: the API never emits a bare JS number for a financial field.
  * Requires a live DB: DATABASE_URL env var.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import pg from 'pg';
 import { assembleEnvelope, envelopeToWire } from '../src/market/envelope.js';
 import type { MarketStateRow } from '../src/market/envelope.js';

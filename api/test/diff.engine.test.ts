@@ -10,7 +10,7 @@ import { computeSinceLastCheck } from '../src/diff/engine.js';
 import { D, parseDecimal, toSessionDate, toUtcTimestamp, DataFreshness } from '@stockwatch/contracts';
 import type { AdjustmentResult } from '../src/diff/adjustment.js';
 
-const NO_ADJUSTMENT: AdjustmentResult = { factor: D.one(), hasUnsupportedAction: false, actions: [] };
+const NO_ADJUSTMENT: AdjustmentResult = { factor: D.one(), hasUnsupportedAction: false, actions: [], splitLabels: [] };
 const NO_HOLIDAYS = new Set<ReturnType<typeof toSessionDate>>();
 
 // 2024-01-08 is a Monday; 2024-01-15 is the next Monday (a full week later, no holidays in range).
@@ -147,6 +147,7 @@ describe('T27 — DiffEngine: suppression short-circuit (INV-12)', () => {
       factor: D.one(),
       hasUnsupportedAction: true,
       actions: [],
+      splitLabels: [],
     };
 
     const result = computeSinceLastCheck({

@@ -44,7 +44,7 @@ export async function resolveOrRegisterSymbol(
   let isNew = false;
 
   if (symRows.length > 0) {
-    instrumentId = BigInt(symRows[0].instrument_id);
+    instrumentId = BigInt(symRows[0]!.instrument_id);
   } else {
     // ── 2. Register a new instrument ───────────────────────────────────────
     const { rows: instrRows } = await query<{ id: string }>(
@@ -54,7 +54,8 @@ export async function resolveOrRegisterSymbol(
        RETURNING id`,
       [],
     );
-    instrumentId = BigInt(instrRows[0].id);
+    // INSERT ... RETURNING always yields exactly one row.
+    instrumentId = BigInt(instrRows[0]!.id);
 
     await query(
       client,

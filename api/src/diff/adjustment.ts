@@ -11,6 +11,30 @@ export interface AdjustmentResult {
   readonly factor: Decimal;
   readonly hasUnsupportedAction: boolean;
   readonly actions: readonly CorporateAction[];
+  /** One label per supported SPLIT action in range, e.g. "adjusted for 4-for-1 split" (T34, INV-12). */
+  readonly splitLabels: readonly string[];
+}
+
+/**
+ * "adjusted for 4-for-1 split" style label for a single supported split action — the label is
+ * what makes the read-time baseline adjustment visible rather than a silent number swap.
+ * `factor` is new-price/old-price (0.25 for a 4-for-1 split); the ratio is derived from it, never
+ * stored separately, so it can't drift from the number actually multiplied into the baseline.
+ */
+export function describeSplit(action: CorporateAction): string | null {
+  if (action.actionType !== 'SPLIT' || !action.isSupported || action.adjustmentFactor === undefined) {
+    return null;
+  }
+  const factor = action.adjustmentFactor;
+  if (D.lte(factor, D.zero())) {
+    return null;
+  }
+  if (D.lte(factor, D.one())) {
+    const ratio = D.div(D.one(), factor).toFixed(0);
+    return `adjusted for ${ratio}-for-1 split`;
+  }
+  const ratio = factor.toFixed(0);
+  return `adjusted for 1-for-${ratio} split`;
 }
 
 interface CorporateActionRow {
@@ -72,5 +96,7 @@ export async function factorBetween(
     actions.push(action);
   }
 
-  return { factor, hasUnsupportedAction, actions };
+  const splitLabels = actions.map(describeSplit).filter((label): label is string => label !== null);
+
+  return { factor, hasUnsupportedAction, actions, splitLabels };
 }

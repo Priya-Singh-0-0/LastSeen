@@ -44,6 +44,8 @@ export interface DiffResult<TChange> {
   readonly elapsedMs?: number;
   readonly sessionsElapsed?: number;
   readonly volatilityMultiple?: Decimal;
+  /** One label per supported SPLIT action in the adjustment range, e.g. "adjusted for 4-for-1 split". */
+  readonly adjustmentLabels?: readonly string[];
 }
 
 export function computeSinceLastCheck<TChange>(input: DiffInput<TChange>): DiffResult<TChange> {
@@ -71,6 +73,7 @@ export function computeSinceLastCheck<TChange>(input: DiffInput<TChange>): DiffR
   }
 
   const comparisonStatus: ComparisonStatus = current.sigma20 === null ? 'INSUFFICIENT_HISTORY' : 'OK';
+  const adjustmentLabels = adjustment.splitLabels;
 
   return {
     comparisonStatus,
@@ -82,5 +85,6 @@ export function computeSinceLastCheck<TChange>(input: DiffInput<TChange>): DiffR
     elapsedMs,
     sessionsElapsed,
     ...(volatilityMultiple !== undefined ? { volatilityMultiple } : {}),
+    ...(adjustmentLabels.length > 0 ? { adjustmentLabels } : {}),
   };
 }

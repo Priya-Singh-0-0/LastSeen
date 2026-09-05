@@ -55,7 +55,8 @@ export async function registerAuthRoutes(app: FastifyInstance, pool: Pool): Prom
       [email, passwordHash],
     );
 
-    return reply.code(201).send({ id: rows[0].id });
+    // INSERT ... RETURNING always yields exactly one row.
+    return reply.code(201).send({ id: rows[0]!.id });
   });
 
   // ─── POST /auth/login ───────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ export async function registerAuthRoutes(app: FastifyInstance, pool: Pool): Prom
     );
 
     const user = rows[0];
-    const valid = user ? await verifyPassword(user.password_hash, password) : false;
+    const valid = user !== undefined && (await verifyPassword(user.password_hash, password));
 
     // Record attempt.
     await query(
@@ -99,7 +100,7 @@ export async function registerAuthRoutes(app: FastifyInstance, pool: Pool): Prom
       [email, valid],
     );
 
-    if (!valid) {
+    if (!valid || user === undefined) {
       return reply.code(401).send({ error: 'Invalid credentials' });
     }
 

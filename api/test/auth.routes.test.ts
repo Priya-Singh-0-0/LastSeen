@@ -4,7 +4,7 @@
  *
  * Requires a live DB: DATABASE_URL env var.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import pg from 'pg';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
@@ -19,7 +19,6 @@ const describeWithDb = DATABASE_URL ? describe : describe.skip;
 
 describeWithDb('T9 — auth routes', () => {
   let pool: pg.Pool;
-  let client: pg.PoolClient;
   let app: ReturnType<typeof Fastify>;
 
   beforeAll(async () => {
@@ -38,14 +37,21 @@ describeWithDb('T9 — auth routes', () => {
     _resetPool();
   });
 
-  beforeEach(async () => {
-    client = await pool.connect();
-    await client.query('BEGIN');
-  });
+  // A BEGIN'd-and-rolled-back client can't isolate these tests: registration goes
+  // through `app.inject`, which queries via `pool` directly (T8's requireSession fix,
+  // auth.session.test.ts) — a different connection that never sees the transactional
+  // client's uncommitted rows, and whose own writes commit immediately regardless of
+  // what the client does. Fixtures are committed directly and cleaned up here instead.
+  const FIXED_TEST_EMAILS = [
+    'route_test@example.com',
+    'dup@example.com',
+    'logintest@example.com',
+    'badpw@example.com',
+    'logout_test@example.com',
+  ];
 
   afterEach(async () => {
-    await client.query('ROLLBACK');
-    client.release();
+    await pool.query(`DELETE FROM users WHERE email = ANY($1)`, [FIXED_TEST_EMAILS]);
   });
 
   // ── register ───────────────────────────────────────────────────────────────
@@ -61,14 +67,14 @@ describeWithDb('T9 — auth routes', () => {
   });
 
   it('register: malformed payload is rejected with 400 and no DB write', async () => {
-    const before = await client.query('SELECT COUNT(*) FROM users');
+    const before = await pool.query('SELECT COUNT(*) FROM users');
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
       payload: { email: 'not-an-email', password: 'short' },
     });
     expect(res.statusCode).toBe(400);
-    const after = await client.query('SELECT COUNT(*) FROM users');
+    const after = await pool.query('SELECT COUNT(*) FROM users');
     expect(before.rows[0].count).toBe(after.rows[0].count);
   });
 

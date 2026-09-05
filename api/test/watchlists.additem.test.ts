@@ -4,14 +4,14 @@
  * No outbound HTTP occurs on this path.
  * Requires a live DB: DATABASE_URL env var.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import { registerAuthRoutes } from '../src/auth/routes.js';
 import { registerWatchlistRoutes } from '../src/watchlists/routes.js';
 import { SESSION_COOKIE_NAME } from '../src/auth/middleware.js';
-import { getPool, _resetPool, query } from '../src/db.js';
+import { getPool, _resetPool } from '../src/db.js';
 
 pg.types.setTypeParser(1700 as pg.TypeId, (v: string) => v);
 
@@ -20,10 +20,7 @@ const describeWithDb = DATABASE_URL ? describe : describe.skip;
 
 describeWithDb('T11 — watchlist add-item', () => {
   let pool: pg.Pool;
-  let client: pg.PoolClient;
   let app: ReturnType<typeof Fastify>;
-  let userToken: string;
-  let watchlistId: string;
 
   beforeAll(async () => {
     _resetPool();
@@ -34,16 +31,6 @@ describeWithDb('T11 — watchlist add-item', () => {
     await registerAuthRoutes(app, pool);
     await registerWatchlistRoutes(app, pool);
     await app.ready();
-
-    await app.inject({
-      method: 'POST', url: '/auth/register',
-      payload: { email: `additem_${Date.now()}@example.com`, password: 'testpassword123' },
-    });
-    const loginRes = await app.inject({
-      method: 'POST', url: '/auth/login',
-      payload: { email: `additem_${Date.now()}@example.com`, password: 'testpassword123' },
-    });
-    // Use a deterministic email for the same user between register+login.
   });
 
   afterAll(async () => {

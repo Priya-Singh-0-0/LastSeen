@@ -1,4 +1,4 @@
-import type { FastifyRequest, FastifyReply, HookHandlerDoneFunction } from 'fastify';
+import type { FastifyRequest, FastifyReply } from 'fastify';
 import { lookupSession } from './session.js';
 import type { Pool } from '../db.js';
 

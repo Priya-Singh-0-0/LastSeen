@@ -213,9 +213,10 @@ describeWithDb('T31 — GET /watchlists/:id/inbox', () => {
   it('makes zero outbound network calls (no provider adapter import possible from the API)', async () => {
     // Structural guarantee: the API package has no Alpaca SDK dependency at all (INV-2),
     // so this route cannot reach a market provider even in principle.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pkg = await import('../package.json', { with: { type: 'json' } });
-    const deps = { ...(pkg.default as any).dependencies, ...(pkg.default as any).devDependencies };
+    const pkg = (await import('../package.json', { with: { type: 'json' } })) as {
+      default: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    };
+    const deps = { ...pkg.default.dependencies, ...pkg.default.devDependencies };
     expect(Object.keys(deps).some((d) => d.toLowerCase().includes('alpaca'))).toBe(false);
   });
 });

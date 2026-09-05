@@ -6,7 +6,7 @@
  *
  * Requires a live DB: DATABASE_URL env var.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
@@ -31,7 +31,6 @@ describeWithDb('T10 — cross_user_authorization_denied', () => {
   let userAWatchlistId: string;
   let userAInstrumentId: string;
   let userAAckToken: string;
-  let client: pg.PoolClient;
 
   beforeAll(async () => {
     _resetPool();

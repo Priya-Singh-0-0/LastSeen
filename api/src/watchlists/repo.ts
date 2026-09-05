@@ -28,7 +28,8 @@ export async function createWatchlist(
      RETURNING id, user_id AS "userId", name, created_at AS "createdAt", updated_at AS "updatedAt"`,
     [userId, name],
   );
-  return rows[0];
+  // INSERT ... RETURNING always yields exactly one row.
+  return rows[0]!;
 }
 
 /** List all watchlists owned by a user. */

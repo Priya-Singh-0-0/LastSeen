@@ -5,19 +5,59 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-**T34 — Split-adjusted comparison across a checkpoint**
-Objective: Modify `api/src/diff/adjustment.ts`, `api/src/diff/engine.ts`; Test
-`api/test/split.regression.test.ts`. Invariants INV-12, INV-9. Depends on T33 (done), T27 (done).
+**T35 — Unsupported-action suppression**
+Objective: Modify `api/src/diff/engine.ts`, `web/src/pages/InstrumentDetail.tsx`; Test
+`api/test/suppression.test.ts`. Invariants INV-12. Depends on T34 (done).
 
 ## Completed
 
-T1–T33 (Phase 0–5: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
+T1–T34 (Phase 0–5: workspace/toolchain, contracts, worker/API skeletons, auth, watchlist
 CRUD, job queue, provider adapter, market-state persistence, bars/calendar/FeatureExtractor,
 dedupe keys, the eight detectors, Scoring v1, ChangeAssembler v1, Publisher, shared template
 explanation, AdjustmentPolicy read side, ack token mint/verify, checkpoint repository monotonic
 upsert, instrument detail GET and acknowledge POST, inbox read model/ranking/personal explanation,
 inbox/detail UI with evidence drill-down — basic pass, visual polish deferred to impeccable;
-Phase 6: split detection and AdjustmentPolicy write side).
+Phase 6: split detection and AdjustmentPolicy write side, split-adjusted comparison across a
+checkpoint).
+
+## Pre-existing `api` tsc/eslint cleanup (done between T34 and T35, not a numbered task)
+
+All `tsc --noEmit`/`eslint src test` errors that earlier handoffs had been carrying forward as
+"pre-existing, unrelated" are now fixed — `npx tsc --noEmit` and `npx eslint src test` are both
+clean in `api`. Root causes, not suppressions:
+- **`noUncheckedIndexedAccess` array-index errors** (`auth/routes.ts`, `auth/session.ts`,
+  `watchlists/{repo,resolve,routes}.ts`): every site was a `rows[0]` access TS couldn't narrow —
+  either a guaranteed-single-row `INSERT ... RETURNING` (fixed with a `rows[0]!` plus a comment
+  recording the invariant) or a `rows.length > 0`/`=== 0` guard that TS's control-flow analysis
+  doesn't apply to indexed access (fixed with a `!` after the already-performed length check, or by
+  destructuring into a `const row = rows[0]; if (row === undefined) ...` where an early return was
+  natural). `auth/routes.ts`'s login handler was actually restructured (`valid = user !== undefined
+  && ...`, then `if (!valid || user === undefined) return 401`) so TS narrows `user` for real,
+  rather than asserting past it.
+- **`src/db.ts`'s `1700 as pg.TypeId`:** `pg.TypeId` isn't a public export of `@types/pg` (it's an
+  internal alias inside `type-overrides.d.ts`); `setTypeParser`'s oid parameter already accepts a
+  plain `number`, so the cast was both invalid and unnecessary. Removed.
+- **eslint unused-import/var errors** (`auth/middleware.ts`'s `HookHandlerDoneFunction`; several
+  test files' `beforeEach`/`afterEach`/`client`/`query`/`loginRes`/`ts` locals): all were genuine
+  dead code (a `client`-based `BEGIN`/`ROLLBACK` isolation pattern that never actually isolated
+  anything — see below — or leftover copy-paste), removed rather than suppressed.
+- **`api/test/inbox.test.ts`'s two `as any` casts:** replaced with a narrow inline type for the
+  dynamically-imported `package.json` shape instead of `any`.
+
+**Real bug found and fixed while doing this: `auth.routes.test.ts` never actually isolated its
+tests.** It used the same `beforeEach`/`afterEach` `BEGIN`/`ROLLBACK`-on-a-dedicated-`client`
+pattern that T26's handoff already diagnosed and fixed once in `auth.session.test.ts`'s
+`requireSession` suite — the request path goes through `app.inject`, which queries via `pool`
+directly (a different connection that never sees the transactional client's uncommitted rows, and
+whose own writes commit immediately regardless of what the client does). So every fixed-email
+`register` call in this file (`route_test@example.com`, `dup@example.com`, `logintest@example.com`,
+`badpw@example.com`, `logout_test@example.com`) permanently wrote a row that broke the *next* run
+of the suite with a spurious 409 — this is the "stale rows" failure mode the DB-environment note
+below already warned about, just not previously root-caused for this specific file. Fixed the same
+way as the `requireSession` suite: dropped the client/BEGIN/ROLLBACK entirely, fixtures now commit
+directly on `pool`, and a real `afterEach` does `DELETE FROM users WHERE email = ANY($1)` over the
+fixed-email list. Verified by running `test/auth.routes.test.ts` three times back to back with no
+manual truncation in between — all green every time. Full `api` suite: 158/158.
 
 ## Implementation decisions already made (do not re-derive)
 
@@ -406,6 +446,26 @@ files by default).
 
 ## Last completed task
 
+T34 (Split-adjusted comparison across a checkpoint). `api/src/diff/adjustment.ts` +
+`api/src/diff/engine.ts` + `api/test/split.regression.test.ts` (4/4 — `split_across_checkpoint_
+does_not_report_crash`: baseline $180.00 at version 3, 4-for-1 split, current $46.00 at version 4,
+asserts ≈+2.22% and explicitly asserts it is not ≈−74%, asserts an "adjusted for 4-for-1 split"
+label; plus two sequential splits and a split with no intervening price change). `factorBetween`
+now also returns `splitLabels: readonly string[]` — one human-readable label per supported SPLIT
+action in the version range, derived from `describeSplit(action)` (new export in `adjustment.ts`):
+`factor <= 1` renders "adjusted for N-for-1 split" (ratio `1/factor`), `factor > 1` renders
+"adjusted for 1-for-N split" (ratio `factor` itself) — the ratio is always derived from the stored
+`adjustment_factor`, never a separately-stored string, so it can't drift from the number actually
+multiplied into the baseline. `computeSinceLastCheck` (`engine.ts`) passes `adjustment.splitLabels`
+through as `DiffResult.adjustmentLabels?: readonly string[]`, omitted entirely (not `[]`) when
+empty, matching the existing optional-field convention (`volatilityMultiple`, etc.). Also did a
+general `api` `tsc`/`eslint` cleanup in this same working session (see "Pre-existing `api`
+tsc/eslint cleanup" section above) and fixed a real test-isolation bug in `auth.routes.test.ts`
+found while doing it. `npx tsc --noEmit` and `npx eslint src test` both clean. Full `api` suite:
+158/158.
+
+## Previously completed task
+
 T33 (Split detection and AdjustmentPolicy write side). `worker/src/adjustment/index.ts` +
 `worker/src/persist/actions.ts` + `worker/test/splits.test.ts` (7/7 — 3 pure classification
 cases, 4 DB-backed: 4-for-1 split writes factor 0.25 and bumps `instruments.corporate_action_
@@ -418,7 +478,7 @@ independently of this task's changes). See "Implementation decisions already mad
 above for the `CorporateActionCandidate` shape, the classification rule, the shared per-instrument
 `version_seq` counter, and the application-side idempotency check.
 
-## Previously completed task
+## Two tasks ago
 
 T32 (Inbox and detail UI with evidence drill-down — basic pass). `web/src/pages/
 {Inbox,InstrumentDetail}.tsx` + `web/src/components/{AttentionBand,EnvelopeBadge,
@@ -432,21 +492,6 @@ polish deferred to a follow-up `impeccable` session (no DESIGN.md/surface brief 
 "Implementation decisions already made (T32 addendum)" above for the wire-type shape, the
 surfaced-but-unfixed `symbol`/name API gap, the evidence-panel field mismatch vs. the plan
 prose, and the acknowledge-wiring design.
-
-## Two tasks ago
-
-T31 (Inbox read model, ranking, and personal explanation). `api/src/inbox/routes.ts` +
-`api/src/ranking/ranker.ts` + `api/src/explanation/{renderer,personalTemplate}.ts` +
-`api/test/inbox.test.ts` (6/6, DB-backed — cross-user 404, empty-watchlist 200, exactly-3 total
-queries for a 4-item watchlist (1 session lookup + 2 inbox), fixture-set ranking order, explanation
-composition, no-Alpaca-dependency structural check) + `api/test/ranker.test.ts` (7/7, pure) +
-`api/test/explanation.personal.test.ts` (7/7, pure). Also fixed a pre-existing Publisher gap
-(`score`/`band` were never persisted — see T31 addendum) with 2 new cases in
-`worker/test/publisher.test.ts`. `npx tsc --noEmit` passes in both packages (same pre-existing
-unrelated strict-null errors in `api`, none new). Full `worker` suite: 84/84. Full `api` suite:
-154/154 (fresh truncate before each run — see "stale rows" note below). See "Implementation
-decisions already made (T31 addendum)" above for the Publisher fix, the two-query-budget
-judgment calls (no `factorBetween`/no holidays query), and the ranker's staleness de-weight.
 
 ## DB environment (resolved — was previously a blocker)
 

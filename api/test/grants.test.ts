@@ -17,7 +17,7 @@
  * Run: DATABASE_URL=... npm test -w api
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import pg from 'pg';
 import { runMigrations } from '../src/migrate.js';
 

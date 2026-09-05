@@ -3,7 +3,7 @@
  *
  * Requires a live DB: DATABASE_URL env var.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
@@ -153,11 +153,10 @@ describeWithDb('T12 — instrument_tracking maintenance', () => {
   it('attempted write to last_ingested_at as stockwatch_api raises a permission error', async () => {
     // The API role cannot write last_ingested_at — DB-level enforcement from T6.
     // This test connects as stockwatch_api (the default test pool role) and attempts the write.
-    const ts = Date.now();
     const { rows } = await pool.query<{ id: string }>(
       `INSERT INTO instruments (resolution_status) VALUES ('PENDING_RESOLUTION') RETURNING id`,
     );
-    const instrId = rows[0].id;
+    const instrId = rows[0]!.id;
 
     await pool.query(
       `INSERT INTO instrument_tracking (instrument_id, tracking_state, follower_count, priority)

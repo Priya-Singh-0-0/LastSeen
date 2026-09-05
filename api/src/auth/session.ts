@@ -63,8 +63,9 @@ export async function lookupSession(
     [tokenHash],
   );
 
-  if (rows.length === 0) return null;
-  return { userId: BigInt(rows[0].user_id), expiresAt: rows[0].expires_at };
+  const row = rows[0];
+  if (row === undefined) return null;
+  return { userId: BigInt(row.user_id), expiresAt: row.expires_at };
 }
 
 /**

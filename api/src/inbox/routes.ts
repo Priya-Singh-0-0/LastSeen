@@ -220,6 +220,7 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
           factor: D.one(),
           hasUnsupportedAction: (row.corporate_action_version ?? 0) !== checkpointBaselineActionVersion,
           actions: [],
+          splitLabels: [],
         };
 
         const diff = computeSinceLastCheck({

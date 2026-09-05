@@ -141,7 +141,7 @@ export async function registerWatchlistRoutes(app: FastifyInstance, pool: Pool):
       [itmId, wlId, request.user!.id],
     );
     if (rows.length === 0) return reply.code(404).send({ error: 'Not found' });
-    const instrumentId = BigInt(rows[0].instrument_id);
+    const instrumentId = BigInt(rows[0]!.instrument_id);
 
     const deleted = await removeWatchlistItem(pool, request.user!.id, wlId, itmId);
     if (!deleted) return reply.code(404).send({ error: 'Not found' });

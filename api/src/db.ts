@@ -3,7 +3,7 @@ import pg from 'pg';
 // ─── NUMERIC-as-string type parser (INV-9) ────────────────────────────────────
 // OID 1700 = NUMERIC. The pg default parses NUMERIC to a JS float, losing precision.
 // We override it to return the raw string, which parseDecimal() then wraps.
-pg.types.setTypeParser(1700 as pg.TypeId, (value: string) => value);
+pg.types.setTypeParser(1700, (value: string) => value);
 
 export type { Pool, PoolClient, QueryResult } from 'pg';
 
