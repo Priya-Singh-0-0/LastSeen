@@ -26,6 +26,7 @@ export function AddInstrumentForm({ onAdd, status, onDismissStatus }: AddInstrum
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const symbol = value.trim().toUpperCase();
+    if (symbol === '') return;
     setPending(true);
     try {
       await onAdd(symbol);

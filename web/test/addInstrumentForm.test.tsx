@@ -17,6 +17,17 @@ describe('AddInstrumentForm (T-UI-3)', () => {
     await waitFor(() => expect(input).toHaveValue(''));
   });
 
+  it('does not call onAdd when the input is whitespace-only (passes native "required" but trims to empty)', async () => {
+    const onAdd = vi.fn().mockResolvedValue(undefined);
+    render(<AddInstrumentForm onAdd={onAdd} status={{ kind: 'idle' }} onDismissStatus={() => {}} />);
+    const input = screen.getByLabelText('Add a symbol');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(input).toHaveValue('   ');
+  });
+
   it('preserves the input value when onAdd rejects', async () => {
     const onAdd = vi.fn().mockRejectedValue(new Error('boom'));
     render(<AddInstrumentForm onAdd={onAdd} status={{ kind: 'idle' }} onDismissStatus={() => {}} />);
