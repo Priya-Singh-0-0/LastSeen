@@ -40,6 +40,16 @@ export function InstrumentDetail({ data, onAcknowledge }: InstrumentDetailProps)
       {data.percentageChange !== undefined ? (
         <span className="instrument-detail__percentage-change">{data.percentageChange}</span>
       ) : null}
+      {data.comparisonStatus === 'SUPPRESSED_CORPORATE_ACTION' ? (
+        <div className="instrument-detail__suppressed">
+          <span className="instrument-detail__suppressed-label">
+            Comparison unavailable — an unsupported corporate action affects this instrument.
+          </span>
+          <button type="button" onClick={acknowledgeOnce}>
+            Reset baseline
+          </button>
+        </div>
+      ) : null}
       <EvidencePanel changes={data.unseenChanges} />
       <button type="button" onClick={acknowledgeOnce}>
         Mark as read

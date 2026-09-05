@@ -262,4 +262,29 @@ describe('InstrumentDetail page (T32)', () => {
     unmount();
     expect(calls).toBe(0);
   });
+
+  const suppressed: InstrumentDetailResponse = {
+    ...noUnseen,
+    comparisonStatus: 'SUPPRESSED_CORPORATE_ACTION',
+    percentageChange: undefined,
+  };
+
+  it('renders a suppression label and a reset-baseline action when the corporate action is unsupported (T35)', () => {
+    render(<InstrumentDetail data={suppressed} onAcknowledge={() => {}} />);
+    expect(screen.getByText(/unsupported corporate action/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /reset baseline/i })).toBeInTheDocument();
+  });
+
+  it('fires acknowledge when "Reset baseline" is clicked (T35)', () => {
+    let calls = 0;
+    render(<InstrumentDetail data={suppressed} onAcknowledge={() => calls++} />);
+    fireEvent.click(screen.getByRole('button', { name: /reset baseline/i }));
+    expect(calls).toBe(1);
+  });
+
+  it('does not render the suppression label or reset action for an OK comparison', () => {
+    render(<InstrumentDetail data={withUnseen} onAcknowledge={() => {}} />);
+    expect(screen.queryByText(/unsupported corporate action/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /reset baseline/i })).not.toBeInTheDocument();
+  });
 });
