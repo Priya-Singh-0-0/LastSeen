@@ -38,6 +38,11 @@ export interface DiffFields {
 export interface InboxItemWire extends DiffFields {
   readonly instrumentId: string;
   readonly symbol: string;
+  /**
+   * The company name projected from `instrument_catalog`, falling back to the symbol when the
+   * catalog has no row. Optional here only so fixtures predating the projection still typecheck.
+   */
+  readonly name?: string;
   readonly exchange: string | null;
   readonly comparisonStatus: ComparisonStatusValue;
   readonly dataFreshness: string;
@@ -81,14 +86,29 @@ export interface UnseenChangeWire {
 }
 
 export interface InstrumentDetailResponse extends DiffFields {
-  readonly instrumentId: string;
+  /**
+   * Null when the symbol is catalog-only (nobody has starred it, so there is no instrument row
+   * yet): identity is still servable from `instrument_catalog`, but there is no envelope, no
+   * checkpoint, and no `ackToken` until starring registers the instrument.
+   */
+  readonly instrumentId: string | null;
   readonly symbol: string;
+  readonly name?: string;
   readonly exchange: string | null;
   readonly comparisonStatus: ComparisonStatusValue;
   readonly dataFreshness: string;
   readonly current: EnvelopeWire | null;
+  /**
+   * Shared per-instrument explanation for this view (architecture §F.7). Null
+   * until the worker has rendered one — the API asks for it on the first view
+   * that needs it, so it appears on a subsequent load, like the price does while
+   * an instrument is warming.
+   */
+  readonly brief: string | null;
+  /** Which anonymised elapsed-time bucket `brief` describes. */
+  readonly briefWindow: string;
   readonly unseenChanges: readonly UnseenChangeWire[];
-  readonly ackToken: string;
+  readonly ackToken: string | null;
 }
 
 export interface WatchlistItemWire {
@@ -100,4 +120,40 @@ export interface WatchlistItemWire {
 export interface AddItemResultWire {
   readonly instrumentId: string;
   readonly state: 'WARMING' | 'READY';
+}
+
+export interface SearchResultWire {
+  readonly symbol: string;
+  readonly name: string;
+  readonly exchange: string | null;
+}
+
+/** One daily bar. Every numeric is a decimal string on the wire — never a JS number. */
+export interface BarWire {
+  readonly sessionDate: string;
+  readonly open: string;
+  readonly high: string;
+  readonly low: string;
+  readonly close: string;
+  readonly volume: string;
+}
+
+/**
+ * Window summary computed by the API (`GET /instruments/:id/bars`). The chart renders these
+ * verbatim; it never derives a high, low, or change of its own.
+ */
+export interface BarRangeWire {
+  readonly sessions: number;
+  readonly from: string;
+  readonly to: string;
+  readonly high: string;
+  readonly low: string;
+  readonly absoluteChange: string;
+  readonly percentageChange: string | null;
+}
+
+export interface BarsResponse {
+  readonly instrumentId: string;
+  readonly bars: readonly BarWire[];
+  readonly range: BarRangeWire | null;
 }

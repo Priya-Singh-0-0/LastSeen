@@ -8,6 +8,13 @@ import { enqueueJob } from '../jobs/enqueue.js';
  * No outbound HTTP in this file; the provider is called only from the worker.
  * If the symbol is unknown, a PENDING_RESOLUTION instrument is registered
  * and a resolve_instrument job is enqueued for the worker.
+ *
+ * Called from two places: `POST /watchlists/:id/items` (starring) and
+ * `GET /instruments/by-symbol/:symbol` (viewing, T-decouple) — registration itself does not
+ * distinguish why the instrument is being requested. Callers are responsible for what
+ * `instrument_tracking` row follows: watchlist mutation goes through
+ * `watchlists/tracking.ts#onItemAdded` (STARRED demand); a bare view goes through
+ * `watchlists/tracking.ts#registerViewDemand` (VIEWED demand, low priority).
  */
 
 export interface ResolvedInstrument {
@@ -21,7 +28,7 @@ export interface ResolvedInstrument {
  *
  * 1. Try instrument_symbols (case-insensitive).
  * 2. On miss: create instrument (PENDING_RESOLUTION) + symbol row, enqueue resolve_instrument.
- * 3. If no market state exists, enqueue backfill_bars.
+ * 3. If no market state exists, enqueue backfill_bars (history) and ingest_instrument (price).
  * 4. Returns { instrumentId, warming }.
  */
 export async function resolveOrRegisterSymbol(
@@ -82,11 +89,45 @@ export async function resolveOrRegisterSymbol(
   );
 
   const hasMarketState = msRows.length > 0;
-  if (!hasMarketState) {
+
+  // ── 3a. Enqueue backfill if no *provider* history ─────────────────────────
+  // Keyed off the bars themselves, not off market state. Demo-seeded instruments ship with both
+  // seeded bars and seeded market state, so a market-state check concluded "already backfilled"
+  // and they kept their synthetic history forever — the chart showed a sine wave while the price
+  // beside it was real. `upsertDailyBars` overwrites on (instrument_id, session_date), so a
+  // backfill cleanly replaces seeded rows with provider ones.
+  const { rows: barRows } = await query<{ one: number }>(
+    client,
+    `SELECT 1 AS one FROM instrument_bars
+      WHERE instrument_id = $1 AND source <> 'seeded' LIMIT 1`,
+    [instrumentId],
+  );
+  if (barRows.length === 0) {
     await enqueueJob(client, {
       jobType: 'backfill_bars',
       payload: { instrumentId: String(instrumentId), symbol: normalizedSymbol },
       idempotencyKey: `backfill:${String(instrumentId)}`,
+    });
+  }
+
+  if (!hasMarketState) {
+    // ── 4. Enqueue an immediate snapshot ────────────────────────────────────
+    // This is what actually ends the "warming up" wait. `backfill_bars` only fills
+    // `instrument_bars` (history, for the chart); the current price lives in
+    // `instrument_market_state`, which only `ingest_instrument` writes. Without this the
+    // envelope stayed null until the next scheduler tick — POLL_INTERVAL_MS away — which is
+    // exactly the wait the job queue exists to remove. The worker's runner drains within
+    // JOB_POLL_INTERVAL_MS (default 2s).
+    //
+    // The key is bucketed to the minute rather than fixed per instrument: an ingest is a
+    // repeatable operation, so a permanently-fixed key would let one failed attempt block
+    // every future view of that symbol forever, while an unkeyed enqueue would queue one job
+    // per page load. Per-minute bucketing collapses a burst of views into one job and still
+    // self-heals on the next minute.
+    await enqueueJob(client, {
+      jobType: 'ingest_instrument',
+      payload: { instrumentId: String(instrumentId), symbol: normalizedSymbol },
+      idempotencyKey: `ingest:${String(instrumentId)}:${Math.floor(Date.now() / 60_000)}`,
     });
   }
 

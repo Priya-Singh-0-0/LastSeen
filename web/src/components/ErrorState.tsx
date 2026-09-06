@@ -8,8 +8,8 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
     <div className="error-state">
       <p className="error-state__message">{message}</p>
       {onRetry ? (
-        <button type="button" className="button" onClick={onRetry}>
-          Retry
+        <button type="button" className="action action--quiet" onClick={onRetry}>
+          Try again
         </button>
       ) : null}
     </div>

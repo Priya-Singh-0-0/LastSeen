@@ -82,6 +82,36 @@ export interface MarketEvent {
 }
 
 /**
+ * Provider-neutral catalog entry for a tradable asset. Mirrors `instrument_catalog`.
+ *
+ * Reference data only — a symbol and the name it trades under. Carries no price,
+ * no instrument id (the asset need not be followed by anyone yet), and no
+ * provider-specific identifier.
+ */
+export interface AssetRef {
+  readonly symbol: string;
+  readonly name: string;
+  readonly exchange: string | null;
+  readonly assetClass: string | null;
+  /** Provider lifecycle value, verbatim (e.g. 'active'). */
+  readonly status: string;
+  readonly tradable: boolean;
+}
+
+/**
+ * Provider-neutral most-active entry (defect 8). Mirrors `popular_stocks`.
+ *
+ * Reference data, ranked by the provider's own screener — carries no instrument id
+ * and no price, same reasoning as `AssetRef`.
+ */
+export interface MostActive {
+  readonly symbol: string;
+  readonly rank: number;
+  readonly tradeCount: number;
+  readonly volume: number;
+}
+
+/**
  * Provider-neutral corporate action (e.g. split). Mirrors `corporate_actions`.
  */
 export interface CorporateAction {

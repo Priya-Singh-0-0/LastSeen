@@ -24,6 +24,25 @@ describe('Worker config (T1/T4 smoke)', () => {
     expect(config.ALPACA_FEED).toBe('sip');
   });
 
+  it('defaults POLL_INTERVAL_MS to 10 minutes', () => {
+    const config = loadConfig({
+      DATABASE_URL:          'postgres://localhost/test',
+      ALPACA_API_KEY_ID:     'key123',
+      ALPACA_API_SECRET_KEY: 'secret456',
+    });
+    expect(config.POLL_INTERVAL_MS).toBe(10 * 60 * 1000);
+  });
+
+  it('accepts an explicit POLL_INTERVAL_MS override', () => {
+    const config = loadConfig({
+      DATABASE_URL:          'postgres://localhost/test',
+      ALPACA_API_KEY_ID:     'key123',
+      ALPACA_API_SECRET_KEY: 'secret456',
+      POLL_INTERVAL_MS:      '60000',
+    });
+    expect(config.POLL_INTERVAL_MS).toBe(60_000);
+  });
+
   it('throws on missing DATABASE_URL', () => {
     expect(() =>
       loadConfig({

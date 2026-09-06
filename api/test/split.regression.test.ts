@@ -35,7 +35,7 @@ function adjustmentFor(actions: CorporateAction[]): AdjustmentResult {
 }
 
 describe('T34 — split_across_checkpoint_does_not_report_crash', () => {
-  it('a 4-for-1 split across the checkpoint reports ≈ +2.22%, never ≈ -74%', () => {
+  it('a 4-for-1 split across the checkpoint reports +2.2222%, never -74.44%', () => {
     const adjustment = adjustmentFor([splitAction(4, '0.25')]);
 
     const result = computeSinceLastCheck({
@@ -52,11 +52,11 @@ describe('T34 — split_across_checkpoint_does_not_report_crash', () => {
     });
 
     expect(result.comparisonStatus).toBe('OK');
-    // adjustedBaseline = 180 * 0.25 = 45; (46 - 45) / 45 = 0.02222...
+    // adjustedBaseline = 180 * 0.25 = 45; (46 - 45) / 45 = 0.02222... → +2.2222%.
     expect(result.adjustedBaseline!.toFixed()).toBe('45');
-    expect(result.percentageChange!.toDecimalPlaces(4).toNumber()).toBeCloseTo(0.0222, 4);
-    // The unadjusted, wrong comparison would be (46 - 180) / 180 ≈ -0.7444 — must never be reported.
-    expect(result.percentageChange!.toDecimalPlaces(2).toNumber()).not.toBeCloseTo(-0.74, 2);
+    expect(result.percentageChange!.toNumber()).toBeCloseTo(2.2222, 4);
+    // The unadjusted, wrong comparison would be (46 - 180) / 180 ≈ -74.44% — must never be reported.
+    expect(result.percentageChange!.toDecimalPlaces(2).toNumber()).not.toBeCloseTo(-74.44, 2);
     expect(result.percentageChange!.isNegative()).toBe(false);
   });
 
@@ -96,7 +96,7 @@ describe('T34 — split_across_checkpoint_does_not_report_crash', () => {
     });
 
     expect(result.adjustedBaseline!.toFixed()).toBe('45');
-    expect(result.percentageChange!.toDecimalPlaces(4).toNumber()).toBeCloseTo(0.0222, 4);
+    expect(result.percentageChange!.toNumber()).toBeCloseTo(2.2222, 4);
     expect(result.adjustmentLabels).toEqual(['adjusted for 2-for-1 split', 'adjusted for 2-for-1 split']);
   });
 

@@ -17,7 +17,7 @@ vi.mock('../src/api/client.js', async () => {
     getWatchlists: vi.fn(),
     getInbox: vi.fn(),
     getWatchlistItems: vi.fn(),
-    getInstrument: vi.fn(),
+    getInstrumentBySymbol: vi.fn(),
     acknowledge: vi.fn(),
     createWatchlist: vi.fn(),
     renameWatchlist: vi.fn(),
@@ -39,7 +39,7 @@ beforeEach(() => {
   vi.mocked(api.getWatchlists).mockReset();
   vi.mocked(api.getInbox).mockReset();
   vi.mocked(api.getWatchlistItems).mockReset();
-  vi.mocked(api.getInstrument).mockReset();
+  vi.mocked(api.getInstrumentBySymbol).mockReset();
   vi.mocked(api.acknowledge).mockReset();
   vi.mocked(api.createWatchlist).mockReset();
   vi.mocked(api.renameWatchlist).mockReset();
@@ -101,7 +101,7 @@ function itemsFor(instrumentId: string): readonly WatchlistItemWire[] {
 }
 
 describe('App remove-instrument error handling (T-UI-fix)', () => {
-  it('surfaces a failed remove inline via addStatus, not by replacing the screen with ErrorState', async () => {
+  it('surfaces a failed unstar inline via addStatus, not by replacing the screen with ErrorState', async () => {
     vi.mocked(api.getWatchlists).mockResolvedValue([watchlist]);
     vi.mocked(api.getInbox).mockResolvedValue(inboxWith('AAPL', '101'));
     vi.mocked(api.getWatchlistItems).mockResolvedValue(itemsFor('101'));
@@ -111,42 +111,47 @@ describe('App remove-instrument error handling (T-UI-fix)', () => {
 
     await screen.findByText('AAPL');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from this watchlist' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, remove AAPL' }));
+    // The two-step confirm is gone; the margin star is the whole control now.
+    fireEvent.click(screen.getByRole('button', { name: 'Remove AAPL from your watchlist' }));
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Remove failed on server');
 
     // The screen must not have been replaced with the app-wide ErrorState.
-    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
-    // TopBar (and its Sign out affordance) must still be present.
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument();
+    // The top rule — and the account control that holds sign out — must still be present.
+    expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument();
+    // And the ledger itself is still on screen, with the row holding its rank position.
+    expect(screen.getByText('AAPL')).toBeInTheDocument();
   });
 });
 
 describe('App transient UI state resets (T-UI-fix)', () => {
-  it('clears addStatus, lastCheckedAt, detail, loadError, and item map on sign out', async () => {
+  it('clears addStatus, detail, loadError, and the item map on sign out', async () => {
     vi.mocked(api.getWatchlists).mockResolvedValue([watchlist]);
     vi.mocked(api.getInbox).mockResolvedValue(inboxWith('AAPL', '101'));
     vi.mocked(api.getWatchlistItems).mockResolvedValue(itemsFor('101'));
-    vi.mocked(api.addWatchlistItem).mockResolvedValue({ instrumentId: '101', state: 'READY' });
+    vi.mocked(api.addWatchlistItem).mockResolvedValue({ instrumentId: '202', state: 'READY' });
 
     render(<App />);
     await screen.findByText('AAPL');
 
-    // Produce an addStatus banner and a lastCheckedAt value.
-    fireEvent.change(screen.getByLabelText('Add a symbol'), { target: { value: 'AAPL' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-    await screen.findByText(/Added AAPL\./);
-    expect(screen.getByText(/Last checked/)).toBeInTheDocument();
+    // Produce an addStatus banner. Typing an already-watched symbol (AAPL) would now unstar it
+    // instead of re-adding (T-UI-fix defect 3), so an unwatched symbol is used here.
+    const searchInput = screen.getByLabelText('Search stocks');
+    fireEvent.change(searchInput, { target: { value: 'MSFT' } });
+    fireEvent.submit(searchInput.closest('form')!);
+    await screen.findByText(/Added MSFT\./);
 
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     await waitFor(() => expect(api.logout).toHaveBeenCalled());
 
     // Sign back in as (possibly) a different user. Hold the new inbox load open so we can
-    // inspect the screen in the gap between "watchlists loaded" (TopBar mounts) and "inbox
-    // loaded" (the only point at which lastCheckedAt would legitimately be set again) — this is
-    // exactly the window in which a stale value from the previous session would leak through.
+    // inspect the screen in the gap between "watchlists loaded" (the top rule mounts) and
+    // "inbox loaded" — exactly the window in which a value from the previous session would leak
+    // through. (The "Updated …" stamp this also used to cover no longer exists: the top rule is
+    // wordmark / search / account only, per surface brief §6.)
     let resolveInbox: (value: InboxResponse) => void = () => {};
     const inboxPromise = new Promise<InboxResponse>((resolve) => {
       resolveInbox = resolve;
@@ -160,40 +165,36 @@ describe('App transient UI state resets (T-UI-fix)', () => {
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password123' } });
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Account' })).toBeInTheDocument());
 
     // No stale artifact from the previous session should be visible before the new inbox lands.
-    expect(screen.queryByText(/Added AAPL\./)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Last checked/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Added MSFT\./)).not.toBeInTheDocument();
+    expect(screen.queryByText('AAPL')).not.toBeInTheDocument();
 
     resolveInbox({ watchlistId: watchlistTwo.id, items: [] });
-    await screen.findByText(/nothing on this watchlist yet/i);
+    await screen.findByText(/nothing on your watchlist yet/i);
   });
 });
 
-describe('App watchlist-switch state reset (T-UI-fix)', () => {
-  it('clears addStatus when the user switches watchlists', async () => {
-    vi.mocked(api.getWatchlists).mockResolvedValue([watchlist, watchlistTwo]);
-    vi.mocked(api.getInbox).mockImplementation((watchlistId: string) =>
-      Promise.resolve(
-        watchlistId === watchlist.id
-          ? inboxWith('AAPL', '101')
-          : { watchlistId: watchlistTwo.id, items: [] },
-      ),
-    );
-    vi.mocked(api.getWatchlistItems).mockResolvedValue(itemsFor('101'));
-    vi.mocked(api.addWatchlistItem).mockResolvedValue({ instrumentId: '101', state: 'READY' });
+/**
+ * Watchlist selection, creation, rename and deletion are gone from the UI (surface brief §6):
+ * the user has exactly one watchlist and never sees it as an object. The switch-reset test that
+ * lived here has no subject any more, so what replaces it is the behaviour that took its place —
+ * the watchlist is created silently, without ever prompting for a name.
+ */
+describe('App implicit watchlist (surface brief §2)', () => {
+  it('creates a watchlist silently when the user has none, and never asks for a name', async () => {
+    vi.mocked(api.getWatchlists).mockResolvedValue([]);
+    vi.mocked(api.createWatchlist).mockResolvedValue(watchlist);
+    vi.mocked(api.getInbox).mockResolvedValue({ watchlistId: watchlist.id, items: [] });
+    vi.mocked(api.getWatchlistItems).mockResolvedValue([]);
 
     render(<App />);
-    await screen.findByText('AAPL');
 
-    fireEvent.change(screen.getByLabelText('Add a symbol'), { target: { value: 'AAPL' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-    await screen.findByText(/Added AAPL\./);
+    await waitFor(() => expect(api.createWatchlist).toHaveBeenCalledTimes(1));
+    await screen.findByText(/nothing on your watchlist yet/i);
 
-    fireEvent.change(screen.getByLabelText('Watchlist'), { target: { value: watchlistTwo.id } });
-
-    await screen.findByText(/nothing on this watchlist yet/i);
-    expect(screen.queryByText(/Added AAPL\./)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Watchlist name')).not.toBeInTheDocument();
+    expect(screen.queryByText(watchlist.name)).not.toBeInTheDocument();
   });
 });

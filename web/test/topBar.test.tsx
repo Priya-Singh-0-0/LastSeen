@@ -3,106 +3,70 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { TopBar } from '../src/components/TopBar.js';
-import type { WatchlistWire } from '../src/types.js';
 
 afterEach(cleanup);
 
-function watchlist(id: string, name: string): WatchlistWire {
-  return { id, userId: 'u1', name, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
-}
-
+/**
+ * The top rule is now logo / centred search / account glyph (surface brief §6). Watchlist
+ * create/rename/delete and the standalone Add button are gone, so the assertions that covered
+ * them are replaced here rather than dropped: the protection they encoded — that watchlist
+ * state is never destroyed by a stray click, and that sign out stays reachable — is asserted
+ * against the controls that actually exist now.
+ */
 function renderTopBar(overrides: Partial<Parameters<typeof TopBar>[0]> = {}) {
   const props = {
-    watchlists: [watchlist('wl-1', 'Core')],
-    selectedWatchlistId: 'wl-1',
-    onSelectWatchlist: vi.fn(),
-    lastCheckedAt: null,
     onSignOut: vi.fn(),
-    onCreateWatchlist: vi.fn().mockResolvedValue(undefined),
-    onRenameWatchlist: vi.fn().mockResolvedValue(undefined),
-    onDeleteWatchlist: vi.fn().mockResolvedValue(undefined),
+    search: <input aria-label="Search stocks" />,
     ...overrides,
   };
   render(<TopBar {...props} />);
   return props;
 }
 
-describe('TopBar (T-UI-4)', () => {
-  it('renders the watchlist select with exactly one watchlist (old > 1 behavior would have hidden it)', () => {
-    renderTopBar({ watchlists: [watchlist('wl-1', 'Core')] });
-    expect(screen.getByLabelText('Watchlist')).toBeInTheDocument();
+describe('TopBar', () => {
+  it('renders the wordmark and the search line it was given', () => {
+    renderTopBar();
+    expect(screen.getByText('LastSeen')).toBeInTheDocument();
+    expect(screen.getByLabelText('Search stocks')).toBeInTheDocument();
   });
 
-  it('"New watchlist" reveals a form; submitting calls onCreateWatchlist with the typed name; Cancel hides it and calls nothing', async () => {
-    const onCreateWatchlist = vi.fn().mockResolvedValue(undefined);
-    renderTopBar({ onCreateWatchlist });
-
-    fireEvent.click(screen.getByRole('button', { name: 'New watchlist' }));
-    const input = screen.getByLabelText('Watchlist name');
-    fireEvent.change(input, { target: { value: 'Growth' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
-    await vi.waitFor(() => expect(onCreateWatchlist).toHaveBeenCalledWith('Growth'));
-
-    // form hides again on success
-    await vi.waitFor(() => expect(screen.queryByLabelText('Watchlist name')).not.toBeInTheDocument());
-
-    // Reopen and cancel — should not call onCreateWatchlist again
-    fireEvent.click(screen.getByRole('button', { name: 'New watchlist' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByLabelText('Watchlist name')).not.toBeInTheDocument();
-    expect(onCreateWatchlist).toHaveBeenCalledTimes(1);
+  it('exposes no watchlist selection, creation, rename, or delete control', () => {
+    renderTopBar();
+    expect(screen.queryByLabelText('Watchlist')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New watchlist' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
   });
 
-  it('"Rename" seeds its input with the selected watchlist\'s current name', () => {
-    renderTopBar({ watchlists: [watchlist('wl-1', 'Core Holdings')], selectedWatchlistId: 'wl-1' });
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }));
-    expect(screen.getByLabelText('Watchlist name')).toHaveValue('Core Holdings');
-  });
-
-  it('"Delete" does not call onDeleteWatchlist until the confirm is clicked; confirm text names the watchlist; Cancel calls nothing', () => {
-    const onDeleteWatchlist = vi.fn().mockResolvedValue(undefined);
-    renderTopBar({ watchlists: [watchlist('wl-1', 'Core Holdings')], selectedWatchlistId: 'wl-1', onDeleteWatchlist });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(onDeleteWatchlist).not.toHaveBeenCalled();
-    expect(screen.getByText(/Delete 'Core Holdings'\?/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(onDeleteWatchlist).not.toHaveBeenCalled();
-    expect(screen.queryByText(/Delete 'Core Holdings'\?/)).not.toBeInTheDocument();
-  });
-
-  it('sign out still works and calls onSignOut', () => {
+  it('keeps the account menu closed until the glyph is clicked, so sign out is never a stray click', () => {
     const onSignOut = vi.fn();
     renderTopBar({ onSignOut });
+
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Account' })).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+    expect(screen.getByRole('button', { name: 'Account' })).toHaveAttribute('aria-expanded', 'true');
+    expect(onSignOut).not.toHaveBeenCalled();
+  });
+
+  it('calls onSignOut when the menu item is chosen', () => {
+    const onSignOut = vi.fn();
+    renderTopBar({ onSignOut });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(onSignOut).toHaveBeenCalled();
+    expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
-  it('on a failed create, keeps the form open, preserves the typed name, and shows the error inline', async () => {
-    const onCreateWatchlist = vi.fn().mockRejectedValue(new Error('A watchlist with that name already exists.'));
-    renderTopBar({ onCreateWatchlist });
+  it('closes the account menu on Escape without signing out', () => {
+    const onSignOut = vi.fn();
+    renderTopBar({ onSignOut });
 
-    fireEvent.click(screen.getByRole('button', { name: 'New watchlist' }));
-    const input = screen.getByLabelText('Watchlist name');
-    fireEvent.change(input, { target: { value: 'Growth' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
 
-    await vi.waitFor(() => expect(onCreateWatchlist).toHaveBeenCalledWith('Growth'));
-    expect(await screen.findByRole('alert')).toHaveTextContent('A watchlist with that name already exists.');
-    expect(screen.getByLabelText('Watchlist name')).toHaveValue('Growth');
-  });
-
-  it('on a failed delete, keeps the confirm open and shows the error inline instead of losing the confirm state', async () => {
-    const onDeleteWatchlist = vi.fn().mockRejectedValue(new Error('Cannot delete your only watchlist.'));
-    renderTopBar({ watchlists: [watchlist('wl-1', 'Core Holdings')], selectedWatchlistId: 'wl-1', onDeleteWatchlist });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-
-    await vi.waitFor(() => expect(onDeleteWatchlist).toHaveBeenCalledWith('wl-1'));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot delete your only watchlist.');
-    // The confirm is still showing, naming the watchlist — not replaced by anything else.
-    expect(screen.getByText(/Delete 'Core Holdings'\?/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    expect(onSignOut).not.toHaveBeenCalled();
   });
 });

@@ -1,23 +1,39 @@
 import { useEffect, useRef } from 'react';
 import { EnvelopePrice, EnvelopeStatus } from '../components/EnvelopeBadge.js';
 import { EvidencePanel } from '../components/EvidencePanel.js';
-import { Monogram } from '../components/Monogram.js';
-import { StatPair } from '../components/StatPair.js';
-import type { InstrumentDetailResponse } from '../types.js';
-import '../styles.css';
+import { SinceLastChecked } from '../components/SinceLastChecked.js';
+import { BackGlyph, StarGlyph } from '../components/icons.js';
+import { PriceChart } from '../components/PriceChart.js';
+import type { BarsResponse, InstrumentDetailResponse } from '../types.js';
 
 export interface InstrumentDetailProps {
   readonly data: InstrumentDetailResponse;
+  /** Whether this symbol is on the user's own watchlist — independent of `instrumentId`, since
+   *  another user's star can already have registered the instrument (T-UI defect 2). */
+  readonly watched: boolean;
+  /** OHLCV history for the chart. Null while loading, or when the instrument has no bars yet. */
+  readonly bars?: BarsResponse | null;
+  readonly onToggleStar: () => void;
   readonly onAcknowledge: () => void;
   readonly onBack?: () => void;
 }
 
 /**
- * The full unseen change set for one instrument, with an evidence drill-down (architecture
- * §F.6). Fires acknowledge exactly once — on explicit "mark as read", or on unmount after the
- * view has been seen — never on a GET (CLAUDE.md: no GET mutates user state).
+ * The handover sheet: the full unseen change set for one stock, with its evidence exposed
+ * (architecture §F.6).
+ *
+ * Fires acknowledge exactly once — on an explicit countersign, or on unmount after the view has
+ * been seen — never on a GET (CLAUDE.md: no GET mutates user state). That `useRef` latch is
+ * behavioural and is restyled around, never rewritten.
  */
-export function InstrumentDetail({ data, onAcknowledge, onBack }: InstrumentDetailProps) {
+export function InstrumentDetail({
+  data,
+  watched,
+  bars = null,
+  onToggleStar,
+  onAcknowledge,
+  onBack,
+}: InstrumentDetailProps) {
   const acknowledged = useRef(false);
 
   function acknowledgeOnce() {
@@ -38,87 +54,90 @@ export function InstrumentDetail({ data, onAcknowledge, onBack }: InstrumentDeta
   }, []);
 
   const suppressed = data.comparisonStatus === 'SUPPRESSED_CORPORATE_ACTION';
-  // Newest first for the timeline read: unseenChanges arrives oldest-first (published_seq ASC).
-  const timelineChanges = [...data.unseenChanges].reverse();
+  const companyName = data.name !== undefined && data.name !== data.symbol ? data.name : null;
 
   return (
-    <div className="instrument-detail">
+    <div className="sheet">
       {onBack ? (
-        <button type="button" className="instrument-detail__back" onClick={onBack}>
-          ← Back to inbox
+        <button type="button" className="sheet__back" onClick={onBack}>
+          <BackGlyph />
+          Back to your watchlist
         </button>
       ) : null}
 
-      <header className="instrument-detail__header">
-        <div className="instrument-detail__identity">
-          <Monogram symbol={data.symbol} band={null} />
-          <div>
-            <h1 className="instrument-detail__symbol">{data.symbol}</h1>
-            {data.exchange !== null ? <span className="instrument-detail__exchange">{data.exchange}</span> : null}
+      <header className="sheet__head">
+        <div className="sheet__title">
+          <button
+            type="button"
+            className="star sheet__star"
+            aria-label={watched ? `Remove ${data.symbol} from your watchlist` : `Add ${data.symbol} to your watchlist`}
+            onClick={onToggleStar}
+          >
+            <StarGlyph filled={watched} size={24} />
+          </button>
+
+          <div className="sheet__identity">
+            <h1 className="sheet__symbol">{data.symbol}</h1>
+            {companyName !== null ? <p className="sheet__name">{companyName}</p> : null}
+            {data.exchange !== null ? <p className="sheet__exchange">{data.exchange}</p> : null}
           </div>
         </div>
-        <div className="instrument-detail__price-block">
-          <div className="instrument-detail__price">
-            <EnvelopePrice envelope={data.current} />
-          </div>
-          <div className="instrument-detail__status-chips">
-            <EnvelopeStatus envelope={data.current} />
-          </div>
+
+        <div className="sheet__price">
+          <EnvelopePrice envelope={data.current} />
+          <EnvelopeStatus envelope={data.current} />
         </div>
       </header>
 
-      <section className="detail-card" aria-label="Since you last checked">
-        <h2 className="detail-card__title">Since you last checked</h2>
-        <div className="detail-card__stats">
-          {data.adjustedBaseline !== undefined ? (
-            <StatPair label="Adjusted baseline" value={data.adjustedBaseline} />
-          ) : null}
-          {data.absoluteChange !== undefined ? (
-            <StatPair
-              label="Absolute change"
-              value={data.absoluteChange}
-              tone={data.absoluteChange.startsWith('-') ? 'down' : 'up'}
-            />
-          ) : null}
-          {data.percentageChange !== undefined ? (
-            <StatPair
-              label="Percentage change"
-              value={`${data.percentageChange.startsWith('-') ? '' : '+'}${data.percentageChange}%`}
-              tone={data.percentageChange.startsWith('-') ? 'down' : 'up'}
-            />
-          ) : null}
-          {data.sessionsElapsed !== undefined ? (
-            <StatPair label="Sessions elapsed" value={String(data.sessionsElapsed)} />
-          ) : null}
-          {data.volatilityMultiple !== undefined ? (
-            <StatPair label="Volatility multiple" value={data.volatilityMultiple} />
-          ) : null}
-        </div>
-        {data.adjustmentLabels !== undefined && data.adjustmentLabels.length > 0 ? (
-          <p className="detail-card__adjustment-labels">{data.adjustmentLabels.join(', ')}</p>
-        ) : null}
+      {bars && bars.bars.length > 0 && (
+        <section className="sheet__chart" aria-label="Price history">
+          <PriceChart bars={bars.bars} range={bars.range} />
+        </section>
+      )}
+
+      {/* Shared, worker-rendered copy. Displayed verbatim: it is already a
+          formatted API value, and the frontend derives nothing (CLAUDE.md). */}
+      {data.brief !== null ? (
+        <section className="sheet__brief" aria-label="About this stock">
+          <p className="sheet__brief-text">{data.brief}</p>
+        </section>
+      ) : null}
+
+      <section className="sheet__since" aria-label="Since you last checked">
+        <h2 className="sheet__label">Since you last checked</h2>
+        {/* Spread rather than enumerated: an absent diff field must stay absent, not become an
+            explicit `undefined` (the project compiles with exactOptionalPropertyTypes). */}
+        <SinceLastChecked {...data} scale="sheet" awaitingData={data.current === null} />
       </section>
 
       {suppressed ? (
-        <div className="instrument-detail__suppressed">
-          <span className="instrument-detail__suppressed-label">
-            Comparison unavailable — an unsupported corporate action affects this instrument.
-          </span>
-          <button type="button" className="button" onClick={acknowledgeOnce}>
+        <section className="sheet__suppressed">
+          <p className="sheet__suppressed-note">
+            Resetting the baseline starts the comparison again from this stock&apos;s current price.
+          </p>
+          <button type="button" className="action action--quiet" onClick={acknowledgeOnce}>
             Reset baseline
           </button>
-        </div>
+        </section>
       ) : null}
 
-      <section aria-label="Unseen changes">
-        <h2 className="instrument-detail__section-title">Unseen changes</h2>
-        <EvidencePanel changes={timelineChanges} />
+      <section className="sheet__entries" aria-label="Unseen changes">
+        <h2 className="sheet__label">Unseen changes</h2>
+        {/* Rendered in the order the API sent them — published_seq ascending, the order the log
+            was written in. The frontend never re-sorts what the API ranked (CLAUDE.md). */}
+        <EvidencePanel changes={data.unseenChanges} />
       </section>
 
-      <div className="instrument-detail__action-bar">
-        <button type="button" className="button button--primary" onClick={acknowledgeOnce} disabled={unseenCount === 0}>
-          {unseenCount > 0 ? `Mark ${unseenCount} change${unseenCount === 1 ? '' : 's'} as read` : 'Mark as read'}
-        </button>
+      {/* No control when there is nothing to commit: a permanently disabled button offers an
+          action that does not exist. The empty case is a statement, so it is rendered as one. */}
+      <div className="countersign">
+        {unseenCount > 0 ? (
+          <button type="button" className="action action--commit" onClick={acknowledgeOnce}>
+            {`Mark ${unseenCount} change${unseenCount === 1 ? '' : 's'} as read`}
+          </button>
+        ) : (
+          <p className="countersign__empty">You&apos;re up to date on this stock.</p>
+        )}
       </div>
     </div>
   );

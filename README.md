@@ -1,101 +1,94 @@
-# Stockwatch
+# LastSeen
 
 A market watchlist that answers *"what has meaningfully changed in the instruments I care about since I last checked, and what deserves my attention now?"*
-
-## Architecture
-
-See [`docs/architecture/initial-architecture.md`](docs/architecture/initial-architecture.md).  
-See [`docs/plans/implementation-plan.md`](docs/plans/implementation-plan.md).
 
 ## Prerequisites
 
 - Node 22+
-- Docker (for Postgres)
+- Postgres 16, with a database `stockwatch` owned by a superuser role you have credentials for.
+
+  Docker is **optional** — it is just the zero-setup way to get that Postgres:
+
+  ```bash
+  docker compose up -d          # creates db `stockwatch`, user/password `stockwatch`
+  ```
+
+  If you already run Postgres natively on `:5432`, skip this and create the database yourself;
+  nothing else in the project needs Docker.
 
 ## Quick start
 
 ```bash
-# 1. Start Postgres
-docker compose up -d
-
-# 2. Install dependencies
 npm install
 
-# 3. Copy env files and fill in secrets
+# Migrations must run as the superuser — they create the restricted
+# stockwatch_api / stockwatch_worker roles the apps then log in as.
+# Re-running is a no-op.
+DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch npm run migrate -w api
+
+# Demo data: ~33 tickers, a demo user, a watchlist with unseen changes.
+# NOT idempotent — run once, against a freshly migrated database.
+DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch npm run seed -w api
+
+# Env files. 0002_roles.sql gives each role a password equal to its name;
+# the examples ship a "password" placeholder.
 cp api/.env.example api/.env
 cp worker/.env.example worker/.env
-
-# 4. Run migrations (API role)
-npm run migrate -w api
-
-# 5. Start API
-npm run dev -w api
-
-# 6. Start worker (separate terminal)
-npm run dev -w worker
-
-# 7. Start web
-npm run dev -w web
+sed -i 's/stockwatch_api:password/stockwatch_api:stockwatch_api/' api/.env
+sed -i 's/stockwatch_worker:password/stockwatch_worker:stockwatch_worker/' worker/.env
+# Then replace the two change-me secrets in api/.env (32+ chars each).
 ```
 
-## CI (T39)
-
-`.github/workflows/ci.yml` runs on every push/PR to `main`: migrations against a fresh
-Postgres, `typecheck`, `lint` (including the import-boundary rules), then each workspace's
-tests against the same role split used locally (`api` under the restricted `stockwatch_api`
-role, `worker` under the superuser role it writes market facts as), and finally the root
-`test/gates.test.ts` sweep — a checklist that fails if any of the §6 gate table's named tests
-is missing, renamed away from its canonical name, or skipped.
-
-## Test
+Three processes, three terminals:
 
 ```bash
-npm test                   # all workspaces + the gate sweep
-npm test -w api            # API only
-npm test -w worker         # worker only
-npm test -w packages/contracts  # contracts only
+env -u DATABASE_URL npm run dev -w api      # :3000
+env -u DATABASE_URL npm run dev -w worker   # no port; optional for exploring the demo seed
+npm run dev -w web                          # :5173, proxies /api to :3000
 ```
 
-## Alpaca capability verification (T37)
+Open <http://localhost:5173> and sign in as `demo@stockwatch.dev` / `demo12345`, or create a
+fresh account from the sign-in screen.
 
-Verified live against a paper-trading account (2026-09), combining the [Alpaca market-data docs](https://docs.alpaca.markets/us/docs/getting-started-with-alpaca-market-data) with direct API calls through the official `@alpacahq/alpaca-trade-api` SDK:
+> The `env -u DATABASE_URL` prefix matters: `dev` loads `.env` via `tsx --env-file`, and Node
+> will not let that override a `DATABASE_URL` already exported in your shell (e.g. by direnv),
+> so the API would silently connect to the wrong database. Drop the prefix only if your shell
+> has none set. `web` never touches Postgres.
 
-| Capability | Available? | Endpoint | Notes |
-|---|---|---|---|
-| Snapshots / latest quote | ✓ | `GET /v2/stocks/snapshots` | `iex` feed on paper tier |
-| Historical daily bars | ✓ | `GET /v2/stocks/bars` | via `getStockBarsFor` |
-| Corporate actions (splits) | ✓ | `GET /v1/corporate-actions` | confirmed against AAPL's real 2020 4-for-1 split |
-| Earnings / calendar events | ✗ | none | no such endpoint exists; the only historically-adjacent one (`corporate_actions/announcements`) is deprecated |
+### Optional: full symbol search
 
-Because there is no earnings/calendar-events endpoint at any tier, `EARNINGS_RELEASED` events use T38's seeded fallback, with `source` always marked `seeded` — never silently faked as live data.
-
-## Demo seed (T38)
-
-`db/seeds/demo.sql` reproduces a full demo state from an empty (post-migration) database in
-one command:
+Out of the box, search covers the demo seed's ~33 tickers. To search the whole US market
+(~14k symbols, one provider call), put real Alpaca paper-trading keys in `worker/.env` and run:
 
 ```bash
-npm run migrate -w api
-npm run seed -w api          # applies db/seeds/demo.sql against $DATABASE_URL
+env -u DATABASE_URL npm run sync:catalog -w worker
 ```
 
-Seeds ~33 liquid tickers with 400 sessions of daily bars each, a demo user
-(`demo@stockwatch.dev` / `demo12345`) with a watchlist following all of them and a checkpoint
-baselined two trading sessions back, and three instruments that make the demo path in
-architecture §1 visible immediately after seeding:
+Idempotent and retry-safe. The API never calls Alpaca — it reads only the synced table.
 
-- **TSLA** — a large volatility-adjusted move plus an earnings event on the latest session
-  (ranks top of the demo user's inbox)
-- **AAPL** — a 4-for-1 split whose checkpoint baseline predates it, so the instrument detail
-  view shows a real read-time-adjusted comparison rather than a suppressed or crashed one
-  (architecture §I / INV-12, T34)
-- **GME** — an abnormal-volume episode over the last few sessions
+## Tests
 
-All synthetic rows carry `source = 'seeded'`, per the same never-silently-faked rule as the
-earnings fallback above. Not idempotent — re-running against an already-seeded database fails
-on the demo user's unique email; re-seed by dropping and recreating the database.
+Most suites need a live Postgres, via two role-specific env vars:
 
-## Workspace structure
+```bash
+# api + packages/contracts
+export DATABASE_URL=postgres://stockwatch_api:stockwatch_api@localhost:5432/stockwatch
+export TEST_DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch
+
+# worker (writes market-fact tables directly, so it needs the superuser role)
+export DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch
+```
+
+`api/.envrc` and `worker/.envrc` already set these — `direnv allow` in each, or `source` them.
+
+```bash
+npm test                # all workspaces (needs the env vars above)
+npm test -w web         # no DB needed
+npm run typecheck
+npm run lint            # includes the worker/api/web import-boundary rules
+```
+
+## Structure
 
 ```
 packages/contracts/   shared enums, Decimal type, domain DTOs — no domain logic
@@ -104,3 +97,6 @@ worker/               ingestion worker — provider, signals, assembly, publicat
 web/                  Vite + React frontend — formatting only, no financial derivation
 db/migrations/        forward-only SQL migrations, executed by the API
 ```
+
+Design docs: [architecture](docs/architecture/initial-architecture.md) ·
+[implementation plan](docs/plans/implementation-plan.md)

@@ -5,12 +5,281 @@ handoff/state snapshot, not an architecture document — do not add design ratio
 
 ## Next task
 
-All of T1–T40 are implemented and committed. Remaining work, if any, is post-T40: the optional
-model-renderer stretch goal (§7), a real `impeccable` visual-polish pass on the web UI (this
-handoff's styling is a from-spec CoinGecko-dark pass, not designer-reviewed), or picking up any
-gap this handoff flags below.
+Fix `api/test/demoSeed.test.ts` (3 failures) — it is the last stale assertion set from the seed
+purge below. It asserts exactly 400 bars per instrument, a seeded TSLA `URGENT` band, and a seeded
+AAPL 4-for-1 split; the seed deliberately no longer creates any of them. Decide whether the test
+should assert the new "identity and ingestion demand only" seed, or be deleted.
+
+Also unverified: nothing has been looked at in a browser. The chart, the logo placements, the
+by-symbol view-demand path, and the new brief line on the detail sheet have never been seen
+rendering.
+
+**Unresolved:** `api/src/diff/engine.ts`'s `percentageChange` is on the percentage scale (×100,
+4dp) rather than a raw fraction — flagged in the defect pass, never ratified. The
+`GET /instruments/:id/bars` route and `worker/src/explanation/factBundle.ts` both follow the ×100
+convention for consistency, so ratifying or reverting now touches three call sites.
+
+**Note on running tests:** DB-backed suites interfere when run in parallel. A run that produced 11
+failures across `instrumentBySymbol.viewDemand`, `watchlists.additem` and `auth.session` passes
+completely under `--no-file-parallelism` — use that flag (or run the file alone) before treating a
+DB-backed failure as real. Every suite must be run through `direnv exec <dir>` — the global
+`~/.bashrc` exports a `DATABASE_URL` for an unrelated project and Node's `--env-file` does not
+override an already-set shell variable. `worker/.envrc` was edited to add the Gemini key, so
+`direnv allow` may need re-running.
+
+## Completed — Gemini explanation layer (uncommitted)
+
+The §F.7 ModelRenderer stretch goal is now built, as **briefs**: shared per-instrument copy for two
+surfaces that have no change record — first view (what the company does + price vs. its baseline)
+and returning view (price now vs. price before). §F.7 was amended in place (new §F.7.1) to record
+three decisions that deviated from it; read that before changing anything here.
+
+- **Worker owns Gemini.** `GEMINI_API_KEY` / `GEMINI_MODEL` (default `gemini-3.8-flash`) /
+  `GEMINI_TIMEOUT_MS` are in `worker/src/config.ts`, key optional. Absent key ⇒ template-only, and
+  the app is fully correct in that state. The API never calls a model.
+  `gemini-2.5-flash` was rejected as a default: it shuts down 2026-10-16.
+- **New:** migration `0008_instrument_briefs.sql`, `worker/src/explanation/{factBundle,
+  briefTemplate,gemini,modelRenderer,validator}.ts`, `worker/src/persist/briefs.ts`, the
+  `render_brief` job handler, `api/src/explanation/brief.ts`, `BriefWindow` in contracts, and a
+  `sheet__brief` line on the detail page.
+- **No SDK.** `@google/genai` was not added; the client is one `fetch` POST with an
+  `AbortSignal.timeout`, per the no-infrastructure-without-a-requirement rule.
+- **Cache/flow:** API rounds a checkpoint age down to an anonymised bucket
+  (`FIRST_VIEW|D1|D2|W1|M1`), reads `instrument_briefs`, and on a miss enqueues `render_brief` and
+  returns `brief: null`. The text appears on a later load — same warm-on-demand pattern as
+  ingestion. There is no loading state for this in the UI; the line is simply absent until then.
+- **Windows are calendar days, not trading sessions** (D1=1, D2=2, W1=7, M1=30; range = 30 days).
+  The span a brief describes is the time since the user last opened the stock, which is wall-clock.
+  `buildBriefFacts` resolves the past bar by comparing session dates — the newest bar at or before
+  the cutoff — so weekends and holidays cannot shift the comparison, and the validator rejects
+  trading-session vocabulary outright rather than trusting the prompt.
+- **Tests:** 39 validator + 22 renderer/fallback (worker), 14 bucket (api). The fallback contract
+  (architecture test #14) is covered for throw, timeout, ungrounded number, and advisory output.
+  `renderBriefTemplate` is asserted to pass the same validator as model output. Verified: worker
+  `tsc` + `eslint` clean, worker 181/181, api 191/194 (the 3 are `demoSeed.test.ts` above).
+
+- **Verified against the live API** (renderer version now **2**). Two request-shape bugs only a real
+  call could find: `thinkingLevel` must be nested as `generationConfig.thinkingConfig.thinkingLevel`
+  (at the top level it 400s with "Unknown name", so every call fell back to the template); and fact
+  labels containing commas got read as prose — `trailing range, days: 30` produced "Over the 30
+  trailing range, days, the price has traded…". The two span numbers (range length, lookback) are
+  now in `BriefFacts.spans`: allowed by the validator, never shown to the model as figures.
+
+**Still open:** change-record `shared_explanation` remains template-only — the ModelRenderer was
+not extended to it.
+
+**The test suites write to the dev database.** There is no separate test DB: every DB-backed suite
+uses whatever `DATABASE_URL` direnv provides. Two consequences, one of them destructive:
+
+- **Running `npm test` used to empty symbol search** (found 2026-09-07, fixed). Every case in
+  `worker/test/catalog.sync.test.ts` calls the real `syncInstrumentCatalog` with a stub adapter
+  listing two `ZZT` symbols. Its `deactivateMissing` step is table-wide by design, so all ~14k real
+  symbols were marked `status='inactive'` and `GET /instruments/search` returned `{results: []}` for
+  every query while still answering 200. Assertions and cleanup both filtered on `ZZT%`, so the
+  suite passed. That file now snapshots the active set in `beforeAll` and restores it in `afterAll`.
+  Recovery, if it happens again, is `npm run sync:catalog -w worker` (idempotent).
+- `api/test/instrumentBySymbol.viewDemand.test.ts` registers real instruments under
+  `VD${Date.now()}` symbols and cleans up only `jobs`. Leftovers made the scheduler ask Alpaca for
+  them each tick (`invalid symbol: VD1788728975594`); the catalog re-sync deactivated the catalog
+  rows, but five instruments (1183-5, 1188, 1207) still exist with no symbol row, which is why
+  brief logs show `"symbol":"1183"` (`getInstrument` falls back to `String(instrumentId)`).
+
+The durable fix for both is a separate test database, not per-file cleanup. Not done.
+
+## Completed — all seeded market data removed; app runs on live provider data (uncommitted)
+
+`db/seeds/demo.sql` used to fabricate, per ticker: 400 sine-wave bars, a market-state row,
+a checkpoint, and change records/signals — all `source = 'seeded'`. Every chart in the product
+was therefore the same wave at a different scale (`base_price * (1 + 0.06*sin(rn*0.07 +
+length(ticker)))`), sitting next to a real price it had no relationship to. The seed now creates
+**identity and ingestion demand only** (users, watchlists, instruments, symbols, tracking,
+catalog, popular) and enqueues `backfill_bars` + `ingest_instrument` per ticker; the worker
+produces every market fact.
+
+Three bugs kept real data from ever replacing the fake data:
+- `resolveOrRegisterSymbol` enqueued `backfill_bars` only when there was no **market state**.
+  Seeded instruments had seeded market state, so they were judged already-backfilled and kept
+  synthetic bars permanently. Now keyed off whether any non-seeded bar exists.
+- The seed wrote `instrument_tracking.last_ingested_at = NOW()` and `follower_count = 1`,
+  claiming an ingestion that never happened and a follower that didn't exist. Now NULL/0.
+- The local DB additionally held 177 `source='test'` market-state rows and ~145 junk test-fixture
+  instruments still ACTIVE-tracked (`TRKONE…`, `VDS…` etc.), which is what poisoned the batch
+  snapshot fetch every tick.
+
+Local DB purged accordingly (13,200 seeded bars, 177 test market-state rows, 47 change records,
+56 signals, 231 checkpoints, 145 junk instruments) and refilled from the provider: **15,709 bars,
+all `source='adapter'`, 51 pollable instruments, 0 unpriced**. `instruments.last_published_seq`
+was deliberately *not* reset — `published_seq` is assigned once and must never be reused
+(CLAUDE.md); the resulting gap is explicitly allowed.
+
+Checkpoints were deleted rather than rewritten: a baseline must be a price the user actually saw,
+so they re-form as AWAITING_BASELINE on next view.
+
+**Frontend warming poll.** The remaining "warming up forever" was not an ingestion bug at all —
+opening a new stock *enqueues* its ingestion, so the response to that very request is legitimately
+empty, and `App.tsx` fetched once and never looked again. Verified concretely: DSS ingested
+successfully in ~2s while the page still showed warming after 5 minutes. `App.tsx` now re-arms a
+2s `setTimeout` (capped at 20 attempts) while price or chart is missing.
+
+**Not a bug:** `scheduler_tick polled:52 written:0` is correct behaviour when the market is
+closed — the last trade timestamp is already stored, so the monotonic guard (INV-4) refuses the
+rewrite.
+
+## Completed — pipeline revival + charts + logo (uncommitted)
+
+The root finding: the entire signal pipeline (`extractFeatures`, the 8 detectors,
+`assembleSignals`, the scorer, `publishChangeRecord`) was fully implemented and unit-tested but
+**never invoked by any running process**. `worker/src/main.ts` started only the snapshot scheduler
+and the popular-stocks sync. Bars were never ingested, so `sigma20` was permanently null and every
+detail view reported `INSUFFICIENT_HISTORY`. Every change record the app had ever displayed came
+from hand-written literals in `db/seeds/demo.sql`. Second root cause: ingestion demand was created
+only by starring, so viewing an unstarred stock hit a dead-end branch that could never warm up.
+
+- **Demand decoupled from starring.** New `db/migrations/0007_tracking_source.sql` adds a
+  `tracking_source` enum (`VIEWED`/`STARRED`) to `instrument_tracking`, with column-level
+  INSERT/UPDATE grants to `stockwatch_api`. `last_ingested_at` stays the worker's alone.
+  `GET /instruments/by-symbol/:symbol`'s tier-2 branch now calls `resolveOrRegisterSymbol` +
+  `registerViewDemand` instead of returning a null sheet.
+- **Pipeline wired in.** New `worker/src/pipeline.ts` (`runInstrumentPipeline`) and
+  `worker/src/persist/changeRecords.ts` (`loadOpenDrafts`, `persistDraft`) — the missing link
+  between the pure `assembleSignals` and `publishChangeRecord`. Called from the scheduler's
+  `didWrite` branch inside its own transaction, and from a new `ingest_instrument` job handler.
+  `newMarketEvents`/`newCorporateActions` are passed empty: event ingestion is not wired into the
+  polling loop, so signals 7/8 don't fire rather than firing on invented events.
+- **Job runner started.** New `worker/src/jobs/runner.ts` (`startJobRunner`) greedy-drains the
+  queue, yielding every 25 jobs; started from `main.ts`, `JOB_POLL_INTERVAL_MS` (default 2000) in
+  config. This is what replaces the 10-minute warm-up wait.
+- **Two follow-up bugs found by running it** (first live run still showed "warming up"):
+  1. `ingest_instrument` was implemented and the runner was draining, but **nothing ever enqueued
+     it** — it wasn't in `enqueue.ts`'s `JobType` union, so the wiring was never written.
+     `resolveOrRegisterSymbol` enqueued only `backfill_bars`, which fills `instrument_bars`
+     (chart history) and never `instrument_market_state` (the price the envelope reads). Fixed:
+     both the view and star paths now enqueue `ingest_instrument` with a **minute-bucketed**
+     idempotency key (`ingest:<id>:<epoch-minute>`) — a fixed key would let one failed attempt
+     block every future view of that symbol forever; no key would queue a job per page load.
+  2. **One bad symbol killed every tick.** `pollOnce` made a single batched `fetchSnapshots`
+     call, and Alpaca rejects the whole batch with `400 invalid symbol` if any member is junk —
+     so a leftover test fixture (`TRKONE…`) in `instrument_tracking` meant *no* instrument ever
+     ingested, and the 10-minute fallback was dead too. Fixed with `fetchSnapshotsResilient`:
+     batch stays the hot path, and on failure it degrades to per-symbol fetches so good symbols
+     still ingest, marking only genuinely-rejected ones `UNRESOLVABLE` (worker has UPDATE on
+     `instruments`). `selectActiveInstruments` now excludes UNRESOLVABLE, so the poll set
+     self-cleans on the first tick after this lands — no manual DB cleanup needed.
+- **Price chart.** `GET /instruments/:id/bars` (`days` 2–1000, default 260) returns bars ascending
+  plus an API-computed `range` block. **Deliberately not gated on `userTracksInstrument`** —
+  the earlier plan proposed that, but it predates demand being decoupled from starring; bars are
+  shared market facts, not user-owned rows. `web/src/components/PriceChart.tsx` is a hand-rolled
+  SVG polyline; its pixel arithmetic is presentational geometry, and every figure the user reads
+  comes verbatim from `range`.
+- **Logo** at `web/public/logo-mark*.png`, placed in `TopBar` and twice in `SignInView` (top bar
+  + centred above the tagline). `SignInView` carries its own inline header rather than mounting
+  `TopBar`, which is why it needed a separate edit. Known exception recorded in `web/DESIGN.md`
+  §9: the mark keeps its original emerald rather than `--green` `#16C784`, so two greens coexist.
+- **Stale tests.** Of the four suites the defect pass flagged, only
+  `api/test/explanation.personal.test.ts` was still stale (asserted the old "N sessions ago" text
+  and a `sessionsElapsed` input field that no longer exists); rewritten against `elapsedMs`. The
+  `#/instrument/:id` routing, `.col--what`/`.cell--what`, and pre-starred-seed assertions were
+  already cleaned in prior commits. The two long-standing lint errors (unused `sessionsElapsed` in
+  `api/src/inbox/routes.ts`, unused `options` in `web/test/addInstrumentForm.test.tsx`) are fixed.
 
 ## Completed
+
+Dark-ledger-redesign defect pass (10 defects). Worked one at a time, in order, no test suite
+changes (gated off for this pass — see "Test suites knowingly broken" above).
+- **Defects 1–5 (scheduler, symbol routing, watchlist membership as app-level state, search
+  click-to-open, detail-page star) were already implemented** in prior uncommitted work; verified
+  by reading rather than re-implemented.
+- **Defect 6** (`web/src/App.tsx`): `handleSignIn`/`handleRegister` now always `navigate({kind:
+  'inbox'})` before reloading watchlists, rather than resuming whatever hash was in the address
+  bar at sign-in time.
+- **Defect 7** (`web/src/components/AddInstrumentForm.tsx`): the "Added X." toast now
+  auto-dismisses after 4s, has an explicit dismiss button, and is cleared on every hash-based
+  navigation (`App.tsx`'s `hashchange` handler resets `addStatus`).
+- **Defect 8** (popular-stocks board): new `worker/src/popular/sync.ts` (truncate-and-replace
+  sync, mirrors the catalog-sync pattern) on a **6-hour** cadence (`POPULAR_SYNC_INTERVAL_MS`,
+  distinct from the snapshot scheduler's 10-minute cadence — a screener ranking doesn't move
+  meaningfully as often as a price), fed by a new `ProviderAdapter.fetchMostActives` →
+  `alpaca.marketData.screener.mostActives({by:'volume'})` (verified live-reachable on the current
+  paper account before building on it), landing in `db/migrations/0006_popular_stocks.sql`. New
+  read-only `GET /popular` (`api/src/instruments/popular.ts`), new `web/src/components/
+  PopularBoard.tsx` rendered only in the ledger's empty state, starring anything replaces the
+  board with the real ledger on the next read. `db/seeds/demo.sql` now seeds the watchlist empty
+  (previously pre-starred all seeded instruments) and seeds `popular_stocks` instead.
+- **Defect 9** (`api/src/explanation/personalTemplate.ts`, `api/src/inbox/routes.ts`): the
+  "Changes" column (renamed from "What changed" in `web/src/pages/Inbox.tsx`, with matching CSS
+  class renames `.col--what`→`.col--changes`, `.cell--what`→`.cell--changes` in `styles.css` and
+  `InboxRow.tsx`) now phrases actual elapsed time from `diff.elapsedMs` ("3 hours", "2 days") via
+  a new `phraseDuration` helper, API-side — chosen over UI-side formatting because the explanation
+  is already one API-composed sentence and splitting its phrasing across two formatting owners
+  would be worse than keeping the existing pattern where `personalTemplate.ts` owns the whole
+  clause. `sessionsElapsed` is untouched and still separately wired to `SinceLastChecked.tsx`.
+- **Defect 10** (star colour): `.star`/`.search__star.is-watched`/`.popular-board__star.is-watched`
+  now use `--band-urgent` (reused, no new hex) instead of `--ink`. Resolved the resulting
+  adjacency collision with the `URGENT` rail — which shares the same margin cell as the star — by
+  moving `.rail--urgent`'s background off `--band-urgent` onto `--ink` instead (the rail's other
+  two carriers, extent and the caps label, already did the real work per the design doc's own
+  stated carrier hierarchy). `web/DESIGN.md` §3 updated to record both changes.
+- **Verification:** `npm run typecheck` and `npm run build` clean across `web`, `api`, `worker`,
+  and `packages/contracts` (the latter's `dist/` had to be rebuilt for the worker's new
+  `MostActive` type to resolve). Not run: any test suite (see "Test suites knowingly broken").
+
+## Previously completed
+
+Symbol search (post-T40). New `db/migrations/0005_instrument_catalog.sql`,
+`worker/src/catalog/{sync,main}.ts`, `api/src/instruments/search.ts`,
+`worker/test/catalog.sync.test.ts`, `api/test/instrumentSearch.test.ts`,
+`worker/test/fixtures/assets.json`; modified `packages/contracts/src/dto.ts` (new `AssetRef`),
+`worker/src/provider/{index,fixture}.ts` + `provider/alpaca/{client,adapter,dto}.ts`,
+`api/src/server.ts`, `web/src/{App.tsx,types.ts,styles.css,api/client.ts}`,
+`web/src/components/AddInstrumentForm.tsx`, `web/test/addInstrumentForm.test.tsx`,
+`db/seeds/demo.sql`, `worker/package.json`, `README.md`.
+- **Catalog-backed, not provider-proxied — this was the load-bearing decision.** A typeahead
+  that called Alpaca per keystroke would break "user-facing reads must not synchronously call
+  market-data providers" and would need provider credentials in the API. Instead the worker
+  syncs the provider's asset master into `instrument_catalog` and the API searches that table.
+  This is also what production symbol search does (own indexed security master, refreshed on a
+  schedule), so the invariant and the practical answer agree.
+- **`instrument_catalog` is deliberately not joined to `instruments`.** An `instruments` row
+  only exists once some user adds the symbol; search's whole job is finding symbols nobody here
+  follows yet. `symbol` is the natural key, there is no instrument id and no price on the table.
+  Grants follow the existing market-table split: worker writes, API SELECTs only.
+- **Sync is a standalone command (`npm run sync:catalog -w worker`), not a queued job**, because
+  `worker/src/main.ts`'s scheduler is still a placeholder and this needs no per-instrument
+  fan-out. Idempotent: batched (500-row) upsert on `symbol`, then rows untouched by this run are
+  set `status='inactive'` rather than deleted. A zero-asset provider response returns early and
+  leaves the catalog alone — deactivating everything on a bad response would silently kill search.
+- **Verified live, not only against stubs:** `sync:catalog` run against the real paper account
+  fetched and upserted **14,277** US equities; `AAPL`/`NVDA`/`TSLA` came back with real company
+  names. The SDK call is `alpaca.trading.assets.getV2Assets({status:'active', assetClass:'us_equity'})`,
+  still confined to `provider/alpaca/client.ts` (the sole SDK-importing file, INV-13).
+- **Search ranking was fixed against real data, not just fixtures.** First cut ordered every
+  match by `length(symbol)`, which put Apple 9th for the query "app" behind obscure 3-4 letter
+  tickers. Ticker-length is only a prominence proxy *within* ticker matches, so the tiebreaker is
+  now `CASE WHEN symbol LIKE prefix THEN length(symbol) ELSE 0 END, name` — name matches sort by
+  name. LIKE metacharacters in `q` are escaped (a bare `%` returns nothing, not the whole table).
+- **The demo seed writes catalog rows with the ticker as the `name`.** Real company names are a
+  fact the seed has no source for; inventing them is the same class of error as inventing a
+  price. `sync:catalog` overwrites them with real names.
+- **`AddInstrumentForm` degrades to the old blind add-by-symbol box** whenever `onSearch` is
+  absent or the search request fails, and a symbol missing from the catalog can still be typed
+  in full and submitted. Combobox is keyboard-operable (arrows/Enter/Escape, `aria-activedescendant`),
+  debounced at 180ms with latest-wins `AbortController`.
+- **Verification:** `npm run typecheck` and `npm run lint` clean across all four workspaces.
+  `api` 175/175, `worker` 114/114, `web` 73/73, `packages/contracts` 25/25, root gate sweep
+  17/17. Not verified: the dropdown's actual pixel rendering in a browser (styles are new CSS in
+  `styles.css`, tested only at the DOM/role level).
+
+## Previously completed
+
+Dev-run fixes (post-T40, found while writing run instructions). Nothing ever loaded `api/.env` or
+`worker/.env` — no dotenv anywhere — so `npm run dev -w api` always died on `ACK_TOKEN_SECRET:
+Required` regardless of the README's step 5. Both `dev` scripts now pass `tsx --env-file=.env`.
+Note that Node does **not** let `--env-file` override an already-exported variable, so a
+`DATABASE_URL` exported in the developer's shell for another project silently wins and every
+request fails with `password authentication failed`; the README now prefixes the dev commands
+with `env -u DATABASE_URL`.
+
+## Previously completed
 
 T40 (LastSeen web UI). Full frontend build from the (now-deleted) `web/UI_BUILD_TASK.md` brief:
 `web/vite.config.ts` (same-origin `/api` proxy to `:3000` — mandatory, since the API has no CORS

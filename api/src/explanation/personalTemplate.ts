@@ -8,8 +8,31 @@ import type { ComparisonStatus } from '../diff/engine.js';
  */
 export interface PersonalClauseInput {
   readonly comparisonStatus: ComparisonStatus;
-  readonly sessionsElapsed?: number;
+  readonly elapsedMs?: number;
   readonly percentageChange?: Decimal;
+}
+
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = MS_PER_MINUTE * 60;
+const MS_PER_DAY = MS_PER_HOUR * 24;
+
+/**
+ * Phrases a millisecond duration already computed by DiffEngine ("elapsedMs" — wall-clock time
+ * between the user's baseline and the current observation) into words. Picking a unit and
+ * rounding is display phrasing of a value the API owns, not a new calculation.
+ */
+function phraseDuration(elapsedMs: number): string {
+  if (elapsedMs < MS_PER_MINUTE) return 'moments';
+  if (elapsedMs < MS_PER_HOUR) {
+    const minutes = Math.round(elapsedMs / MS_PER_MINUTE);
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  }
+  if (elapsedMs < MS_PER_DAY) {
+    const hours = Math.round(elapsedMs / MS_PER_HOUR);
+    return `${hours} hour${hours === 1 ? '' : 's'}`;
+  }
+  const days = Math.round(elapsedMs / MS_PER_DAY);
+  return `${days} day${days === 1 ? '' : 's'}`;
 }
 
 export function renderPersonalClause(input: PersonalClauseInput): string {
@@ -20,10 +43,11 @@ export function renderPersonalClause(input: PersonalClauseInput): string {
       return "An unsupported corporate action means this can't be compared to your last check.";
     case 'OK':
     case 'INSUFFICIENT_HISTORY': {
-      const sessions = input.sessionsElapsed ?? 0;
-      const sessionWord = sessions === 1 ? 'session' : 'sessions';
+      const duration = input.elapsedMs !== undefined ? phraseDuration(input.elapsedMs) : 'moments';
       const pct = input.percentageChange !== undefined ? toWireString(input.percentageChange) : '0';
-      return `Since you last checked ${sessions} ${sessionWord} ago, it has moved ${pct}.`;
+      // The "%" is a unit label for a figure that already is a percentage (DiffEngine returns
+      // percentageChange on the percentage scale), not a conversion — nothing is computed here.
+      return `Since you last checked ${duration} ago, it has moved ${pct}%.`;
     }
   }
 }

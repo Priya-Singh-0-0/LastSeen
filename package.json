@@ -1,5 +1,5 @@
 {
-  "name": "stockwatch",
+  "name": "lastseen",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*", "api", "worker", "web"],

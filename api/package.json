@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch --env-file=.env src/server.ts",
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

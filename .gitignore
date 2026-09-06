@@ -1,5 +1,6 @@
 # local agent/editor state
 .claude/
+.superpowers/
 .headroom/
 .serena/
 
