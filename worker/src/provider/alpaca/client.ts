@@ -1,5 +1,5 @@
 import { Alpaca, TimeFrame } from '@alpacahq/alpaca-trade-api';
-import type { AlpacaBar, AlpacaClock, AlpacaSnapshotMap } from './dto.js';
+import type { AlpacaAsset, AlpacaBar, AlpacaClock, AlpacaMostActive, AlpacaSnapshotMap } from './dto.js';
 
 /** StockHistoricalFeed (bars) has no `delayed_sip` value — only the live-quote feed does. */
 function toHistoricalFeed(
@@ -16,6 +16,8 @@ export interface AlpacaMarketDataClient {
   fetchSnapshots(symbols: string[]): Promise<AlpacaSnapshotMap>;
   fetchDailyBars(symbol: string, start: Date, end: Date): Promise<AlpacaBar[]>;
   fetchClock(): Promise<AlpacaClock>;
+  fetchAssets(): Promise<AlpacaAsset[]>;
+  fetchMostActives(top: number): Promise<AlpacaMostActive[]>;
 }
 
 export interface AlpacaClientOptions {
@@ -74,6 +76,31 @@ export function createAlpacaClient(options: AlpacaClientOptions): AlpacaMarketDa
     async fetchClock(): Promise<AlpacaClock> {
       const clock = await alpaca.trading.clock.legacyClock();
       return { isOpen: clock.isOpen };
+    },
+
+    async fetchAssets(): Promise<AlpacaAsset[]> {
+      // One unpaginated call — Alpaca returns the whole US-equity master (~11k rows).
+      const assets = await alpaca.trading.assets.getV2Assets({
+        status: 'active',
+        assetClass: 'us_equity',
+      });
+      return assets.map((a) => ({
+        symbol: a.symbol,
+        name: a.name,
+        exchange: a.exchange,
+        assetClass: a._class,
+        status: a.status,
+        tradable: a.tradable,
+      }));
+    },
+
+    async fetchMostActives(top: number): Promise<AlpacaMostActive[]> {
+      const resp = await alpaca.marketData.screener.mostActives({ top, by: 'volume' });
+      return resp.mostActives.map((a) => ({
+        symbol: a.symbol,
+        tradeCount: a.tradeCount,
+        volume: a.volume,
+      }));
     },
   };
 }

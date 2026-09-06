@@ -1,0 +1,7 @@
+[
+  { "symbol": "AAPL", "name": "Apple Inc. Common Stock", "exchange": "NASDAQ", "assetClass": "us_equity", "status": "active", "tradable": true },
+  { "symbol": "TSLA", "name": "Tesla, Inc. Common Stock", "exchange": "NASDAQ", "assetClass": "us_equity", "status": "active", "tradable": true },
+  { "symbol": "APP", "name": "AppLovin Corporation Class A Common Stock", "exchange": "NASDAQ", "assetClass": "us_equity", "status": "active", "tradable": true },
+  { "symbol": "NVDA", "name": "NVIDIA Corporation Common Stock", "exchange": "NASDAQ", "assetClass": "us_equity", "status": "active", "tradable": false },
+  { "symbol": "GME", "name": "GameStop Corporation Class A Common Stock", "exchange": "NYSE", "assetClass": "us_equity", "status": "active", "tradable": true }
+]

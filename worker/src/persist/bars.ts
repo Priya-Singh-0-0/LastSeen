@@ -1,6 +1,47 @@
 import type { PoolClient } from '../db.js';
-import type { DailyBar } from '@stockwatch/contracts';
-import { toWireString } from '@stockwatch/contracts';
+import type { DailyBar, SessionDate } from '@stockwatch/contracts';
+import { Decimal, toWireString, toSessionDate } from '@stockwatch/contracts';
+
+/**
+ * Load the most recent `limit` daily bars for an instrument, descending — `rows[0]` is the
+ * latest session. This is the shape `extractFeatures`/`evaluateDetectors` expect for `history`.
+ *
+ * `session_date` is cast to `::text` rather than read through the pg driver's DATE → JS `Date`
+ * parsing, matching the convention established in `adjustment/index.ts` (avoids a timezone
+ * round-trip). NUMERIC columns already arrive as strings (see `db.ts`), never as JS numbers,
+ * so no float ever enters the money path.
+ */
+export async function loadRecentBars(
+  client: PoolClient,
+  instrumentId: string,
+  limit: number,
+): Promise<DailyBar[]> {
+  const { rows } = await client.query<{
+    session_date: string;
+    open: string;
+    high: string;
+    low: string;
+    close: string;
+    volume: string;
+  }>(
+    `SELECT session_date::text, open, high, low, close, volume
+     FROM instrument_bars
+     WHERE instrument_id = $1
+     ORDER BY session_date DESC
+     LIMIT $2`,
+    [instrumentId, limit],
+  );
+
+  return rows.map((r) => ({
+    instrumentId,
+    sessionDate: toSessionDate(r.session_date) as SessionDate,
+    open: new Decimal(r.open),
+    high: new Decimal(r.high),
+    low: new Decimal(r.low),
+    close: new Decimal(r.close),
+    volume: new Decimal(r.volume),
+  }));
+}
 
 /**
  * Persist daily bars (T17).

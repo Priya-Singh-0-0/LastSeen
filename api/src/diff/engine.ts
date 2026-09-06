@@ -61,7 +61,15 @@ export function computeSinceLastCheck<TChange>(input: DiffInput<TChange>): DiffR
 
   const adjustedBaseline = D.mul(checkpoint.baselinePrice, adjustment.factor);
   const absoluteChange = D.sub(current.price, adjustedBaseline);
-  const percentageChange = D.div(absoluteChange, adjustedBaseline);
+  // `changeRatio` is the raw fraction; `percentageChange` is that fraction expressed as a
+  // percentage, which is what the field is named and what every consumer treats it as (the
+  // personal-explanation template phrases it as a move, the web UI suffixes it with "%").
+  // Volatility below stays on the ratio scale, because sigma20 is a ratio-scale volatility.
+  const changeRatio = D.div(absoluteChange, adjustedBaseline);
+  // Quantised to 4dp (0.0001% resolution — far finer than any market feed). The extra ~26
+  // digits Decimal division emits are an artefact of the division, not precision any source
+  // supplied, and they leak straight into the rendered explanation string.
+  const percentageChange = D.mul(changeRatio, new Decimal(100)).toDecimalPlaces(4);
   const elapsedMs = current.marketTimestamp - checkpoint.baselineMarketTimestamp;
   const sessionsElapsed = countSessions(checkpoint.baselineMarketTimestamp, current.marketTimestamp, holidays);
 
@@ -69,7 +77,7 @@ export function computeSinceLastCheck<TChange>(input: DiffInput<TChange>): DiffR
   // worker/src/signals/detectors.ts): suppress rather than treat as an infinite multiple.
   let volatilityMultiple: Decimal | undefined;
   if (current.sigma20 !== null && !current.sigma20.isZero() && sessionsElapsed > 0) {
-    volatilityMultiple = D.div(D.abs(percentageChange), D.mul(current.sigma20, D.sqrt(new Decimal(sessionsElapsed))));
+    volatilityMultiple = D.div(D.abs(changeRatio), D.mul(current.sigma20, D.sqrt(new Decimal(sessionsElapsed))));
   }
 
   const comparisonStatus: ComparisonStatus = current.sigma20 === null ? 'INSUFFICIENT_HISTORY' : 'OK';

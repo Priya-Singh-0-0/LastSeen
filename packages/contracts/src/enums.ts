@@ -74,6 +74,26 @@ export enum PhenomenonGroup {
   EVENT         = 'EVENT',
 }
 
+/**
+ * Anonymised elapsed-time buckets for shared explanation briefs (migration 0008,
+ * architecture §F.7). Shared vocabulary rather than worker-private: the API
+ * rounds a checkpoint age down to one of these and reads the matching cached
+ * brief, while the worker renders it. Neither process imports the other, so the
+ * bucket set lives here.
+ *
+ * `FIRST_VIEW` is the never-opened surface; the rest are calendar-day lookbacks
+ * (D1=1, D2=2, W1=7, M1=30). Days, not trading sessions: the span a brief
+ * describes is how long since the user last opened the stock, which is
+ * wall-clock time.
+ */
+export enum BriefWindow {
+  FIRST_VIEW = 'FIRST_VIEW',
+  D1         = 'D1',
+  D2         = 'D2',
+  W1         = 'W1',
+  M1         = 'M1',
+}
+
 export enum ComparisonStatus {
   OK                           = 'OK',
   SUPPRESSED_CORPORATE_ACTION  = 'SUPPRESSED_CORPORATE_ACTION',

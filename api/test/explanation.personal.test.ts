@@ -19,33 +19,33 @@ describe('T31 — renderPersonalClause', () => {
     expect(clause).not.toMatch(/%/);
   });
 
-  it('interpolates the exact sessionsElapsed and percentageChange it was given, verbatim', () => {
+  it('interpolates the percentageChange it was given, verbatim', () => {
     const clause = renderPersonalClause({
       comparisonStatus: 'OK',
-      sessionsElapsed: 3,
+      elapsedMs: 3 * 24 * 60 * 60 * 1000,
       percentageChange: D.from('0.0523'),
     });
-    expect(clause).toContain('3');
+    expect(clause).toContain('3 days');
     expect(clause).toContain('0.0523');
   });
 
-  it('uses singular "session" for a single elapsed session', () => {
+  it('uses a singular unit for a single elapsed day', () => {
     const clause = renderPersonalClause({
       comparisonStatus: 'OK',
-      sessionsElapsed: 1,
+      elapsedMs: 24 * 60 * 60 * 1000,
       percentageChange: D.from('0.01'),
     });
-    expect(clause).toContain('1 session ');
-    expect(clause).not.toContain('1 sessions');
+    expect(clause).toContain('1 day ');
+    expect(clause).not.toContain('1 days');
   });
 
   it('renders INSUFFICIENT_HISTORY the same shape as OK (no volatility claim needed)', () => {
     const clause = renderPersonalClause({
       comparisonStatus: 'INSUFFICIENT_HISTORY',
-      sessionsElapsed: 5,
+      elapsedMs: 5 * 60 * 60 * 1000,
       percentageChange: D.from('-0.02'),
     });
-    expect(clause).toContain('5');
+    expect(clause).toContain('5 hours');
     expect(clause).toContain('-0.02');
   });
 });
@@ -54,10 +54,10 @@ describe('T31 — composeExplanation', () => {
   it('concatenates the stored shared explanation with the personal clause', () => {
     const composed = composeExplanation({
       topUnseenSharedExplanation: 'Price changed +5.23% from a previous close of 100.00.',
-      personalClause: 'Since you last checked 3 sessions ago, it has moved 0.0523.',
+      personalClause: 'Since you last checked 3 days ago, it has moved 0.0523%.',
     });
     expect(composed).toBe(
-      'Price changed +5.23% from a previous close of 100.00. Since you last checked 3 sessions ago, it has moved 0.0523.',
+      'Price changed +5.23% from a previous close of 100.00. Since you last checked 3 days ago, it has moved 0.0523%.',
     );
   });
 

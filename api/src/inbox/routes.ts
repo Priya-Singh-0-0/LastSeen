@@ -42,6 +42,7 @@ interface ItemJoinRow {
   corporate_action_version: number | null;
   symbol: string | null;
   exchange: string | null;
+  company_name: string | null;
   price: string | null;
   currency: string | null;
   market_timestamp: Date | null;
@@ -75,7 +76,7 @@ async function fetchItemJoin(pool: Pool, watchlistId: bigint, userId: bigint): P
     `SELECT
        wi.instrument_id,
        i.corporate_action_version,
-       isym.symbol, isym.exchange,
+       isym.symbol, isym.exchange, ic.name AS company_name,
        ims.price, ims.currency, ims.market_timestamp, ims.ingested_at, ims.source,
        ims.market_status, ims.value_kind, ims.data_freshness, ims.precision_hint,
        c.seen_through_publication_seq, c.baseline_price, c.baseline_market_timestamp,
@@ -84,6 +85,10 @@ async function fetchItemJoin(pool: Pool, watchlistId: bigint, userId: bigint): P
      LEFT JOIN watchlist_items wi ON wi.watchlist_id = wl.id
      LEFT JOIN instruments i ON i.id = wi.instrument_id
      LEFT JOIN instrument_symbols isym ON isym.instrument_id = i.id AND isym.valid_to IS NULL
+     -- Reference data only: the catalog's company name, so the UI can label a row "Apple Inc."
+     -- under "AAPL". A join, never an extra query — this route's two-query budget is a hard
+     -- invariant (INV-1). Absent catalog row falls back to the symbol at compose time.
+     LEFT JOIN instrument_catalog ic ON ic.symbol = isym.symbol
      LEFT JOIN instrument_market_state ims ON ims.instrument_id = i.id
      LEFT JOIN user_instrument_checkpoints c ON c.instrument_id = i.id AND c.user_id = $2
      WHERE wl.id = $1 AND wl.user_id = $2`,
@@ -120,6 +125,7 @@ async function fetchUnseenChanges(
 interface ComposedItem {
   instrumentId: string;
   symbol: string;
+  name: string;
   exchange: string | null;
   comparisonStatus: ComparisonStatus;
   dataFreshness: string;
@@ -201,7 +207,7 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
       let current: Record<string, unknown> | null = null;
       let diffFields: Record<string, unknown> = {};
       let sinceCheckMove: Decimal | null = null;
-      let sessionsElapsed: number | undefined;
+      let elapsedMs: number | undefined;
       let percentageChange: Decimal | undefined;
 
       if (row.price === null) {
@@ -248,7 +254,7 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
         comparisonStatus = diff.comparisonStatus;
         dataFreshness = diff.dataFreshness;
         percentageChange = diff.percentageChange;
-        sessionsElapsed = diff.sessionsElapsed;
+        elapsedMs = diff.elapsedMs;
         sinceCheckMove = diff.percentageChange ?? null;
         diffFields = {
           ...(diff.adjustedBaseline !== undefined ? { adjustedBaseline: toWireString(diff.adjustedBaseline) } : {}),
@@ -262,7 +268,7 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
 
       const personalClause = renderPersonalClause({
         comparisonStatus,
-        ...(sessionsElapsed !== undefined ? { sessionsElapsed } : {}),
+        ...(elapsedMs !== undefined ? { elapsedMs } : {}),
         ...(percentageChange !== undefined ? { percentageChange } : {}),
       });
       const explanation = composeExplanation({
@@ -273,6 +279,9 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
       const composed: ComposedItem = {
         instrumentId: row.instrument_id,
         symbol: row.symbol ?? row.instrument_id,
+        // Never null, never invented: the catalog name when the worker has synced one,
+        // otherwise the symbol itself.
+        name: row.company_name ?? row.symbol ?? row.instrument_id,
         exchange: row.exchange,
         comparisonStatus,
         dataFreshness,
@@ -300,6 +309,7 @@ export async function registerInboxRoutes(app: FastifyInstance, pool: Pool): Pro
       items: ranked.map((r) => ({
         instrumentId: r.item.instrumentId,
         symbol: r.item.symbol,
+        name: r.item.name,
         exchange: r.item.exchange,
         comparisonStatus: r.item.comparisonStatus,
         dataFreshness: r.item.dataFreshness,

@@ -1,6 +1,6 @@
 import { parseDecimal, toSessionDate, toUtcTimestamp, nowUtc } from '@stockwatch/contracts';
 import { MarketStatus, ValueKind, DataFreshness } from '@stockwatch/contracts';
-import type { Observation, DailyBar } from '@stockwatch/contracts';
+import type { Observation, DailyBar, AssetRef, MostActive } from '@stockwatch/contracts';
 import type { ProviderAdapter } from '../index.js';
 import type { AlpacaMarketDataClient } from './client.js';
 
@@ -82,6 +82,31 @@ export class AlpacaAdapter implements ProviderAdapter {
       low: parseDecimal(String(b.l)),
       close: parseDecimal(String(b.c)),
       volume: parseDecimal(String(b.v)),
+    }));
+  }
+
+  async fetchAssets(): Promise<AssetRef[]> {
+    const assets = await this.client.fetchAssets();
+    return assets.map((a) => ({
+      symbol: a.symbol,
+      name: a.name,
+      // Alpaca always sends these; an empty string is not a value worth storing.
+      exchange: a.exchange === '' ? null : a.exchange,
+      assetClass: a.assetClass === '' ? null : a.assetClass,
+      status: a.status,
+      tradable: a.tradable,
+    }));
+  }
+
+  async fetchMostActives(limit: number): Promise<MostActive[]> {
+    const actives = await this.client.fetchMostActives(limit);
+    // The screener returns its own volume-descending order; rank is that order,
+    // stamped here rather than trusted implicitly so a caller never has to re-derive it.
+    return actives.map((a, index) => ({
+      symbol: a.symbol,
+      rank: index + 1,
+      tradeCount: a.tradeCount,
+      volume: a.volume,
     }));
   }
 }

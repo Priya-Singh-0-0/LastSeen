@@ -19,9 +19,10 @@ const NEXT_MONDAY = toUtcTimestamp(new Date('2024-01-15T14:30:00Z').getTime());
 
 describe('T27 — DiffEngine: since_last_check_arithmetic_is_exact', () => {
   it.each([
-    { baseline: '100.000000', current: '110.000000', expectedAbs: '10', expectedPct: '0.1' },
-    { baseline: '100.000000', current: '90.000000', expectedAbs: '-10', expectedPct: '-0.1' },
-    { baseline: '200.000000', current: '150.000000', expectedAbs: '-50', expectedPct: '-0.25' },
+    // expectedPct is a percentage, not a fraction: (110-100)/100 = 0.1 → 10%.
+    { baseline: '100.000000', current: '110.000000', expectedAbs: '10', expectedPct: '10' },
+    { baseline: '100.000000', current: '90.000000', expectedAbs: '-10', expectedPct: '-10' },
+    { baseline: '200.000000', current: '150.000000', expectedAbs: '-50', expectedPct: '-25' },
     { baseline: '50.000000', current: '50.000000', expectedAbs: '0', expectedPct: '0' },
   ])('baseline $baseline → current $current is exact', ({ baseline, current, expectedAbs, expectedPct }) => {
     const result = computeSinceLastCheck({

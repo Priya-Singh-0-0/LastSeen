@@ -34,3 +34,20 @@ export type AlpacaSnapshotMap = Record<string, AlpacaSnapshot>;
 export interface AlpacaClock {
   readonly isOpen: boolean;
 }
+
+/** One entry of the screener's most-actives list (defect 8). */
+export interface AlpacaMostActive {
+  readonly symbol: string;
+  readonly tradeCount: number;
+  readonly volume: number;
+}
+
+/** One entry of the assets master (`GET /v2/assets`), as this adapter reads it. */
+export interface AlpacaAsset {
+  readonly symbol: string;
+  readonly name: string;
+  readonly exchange: string;
+  readonly assetClass: string;
+  readonly status: string;
+  readonly tradable: boolean;
+}

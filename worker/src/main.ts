@@ -1,5 +1,12 @@
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
+import { createAlpacaClient } from './provider/alpaca/client.js';
+import { AlpacaAdapter } from './provider/alpaca/adapter.js';
+import { startScheduler } from './scheduler.js';
+import { startPopularScheduler } from './popular/sync.js';
+import { startJobRunner } from './jobs/runner.js';
+import { buildHandlers } from './jobs/handlers.js';
+import { createGeminiClient } from './explanation/gemini.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -24,17 +31,49 @@ async function main(): Promise<void> {
     client.release();
   }
 
+  const adapter = new AlpacaAdapter(
+    createAlpacaClient({
+      keyId: config.ALPACA_API_KEY_ID,
+      secret: config.ALPACA_API_SECRET_KEY,
+      feed: config.ALPACA_FEED,
+    }),
+  );
+  const scheduler = startScheduler(pool, adapter, config.POLL_INTERVAL_MS);
+  const popularScheduler = startPopularScheduler(pool, adapter, config.POPULAR_SYNC_INTERVAL_MS);
+  // Drains the `jobs` table the API enqueues into. Without this the queue was write-only:
+  // every backfill/ingest job the API created sat unclaimed forever.
+  // The model renderer is optional (§F.7). No key configured is a supported
+  // steady state: every brief is then the deterministic template, and nothing
+  // else about the product changes.
+  const gemini = config.GEMINI_API_KEY
+    ? createGeminiClient({
+        apiKey: config.GEMINI_API_KEY,
+        model: config.GEMINI_MODEL,
+        timeoutMs: config.GEMINI_TIMEOUT_MS,
+      })
+    : null;
+
+  const jobRunner = startJobRunner(pool, buildHandlers(adapter, gemini), config.JOB_POLL_INTERVAL_MS);
+
   // Graceful shutdown
   const shutdown = async () => {
     console.log(JSON.stringify({ event: 'worker_shutting_down' }));
+    scheduler.stop();
+    popularScheduler.stop();
+    jobRunner.stop();
     await pool.end();
     process.exit(0);
   };
   process.once('SIGINT',  () => { void shutdown(); });
   process.once('SIGTERM', () => { void shutdown(); });
 
-  // Scheduler loop placeholder — filled in T13+
-  console.log(JSON.stringify({ event: 'worker_idle', msg: 'scheduler not yet implemented' }));
+  console.log(JSON.stringify({
+    event: 'worker_started_scheduler',
+    intervalMs: config.POLL_INTERVAL_MS,
+    popularSyncIntervalMs: config.POPULAR_SYNC_INTERVAL_MS,
+    jobPollIntervalMs: config.JOB_POLL_INTERVAL_MS,
+    modelRenderer: gemini ? config.GEMINI_MODEL : 'disabled (template-only)',
+  }));
 }
 
 main().catch(err => {

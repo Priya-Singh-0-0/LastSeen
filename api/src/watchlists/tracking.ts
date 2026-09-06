@@ -57,18 +57,48 @@ async function upsertTrackingFromCount(
   const followerCount = parseInt(rows[0]?.cnt ?? '0', 10);
   const trackingState = followerCount > 0 ? 'ACTIVE' : 'IDLE';
   const priority = followerCount; // simple: more followers = higher priority
+  // A row with >=1 follower is STARRED demand; one with none is demoted back to VIEWED
+  // (never deleted) rather than losing the demand-source label a later reaper needs.
+  const trackingSource = followerCount > 0 ? 'STARRED' : 'VIEWED';
 
   await query(
     client,
-    `INSERT INTO instrument_tracking (instrument_id, tracking_state, follower_count, priority, updated_at)
-     VALUES ($1, $2, $3, $4, NOW())
+    `INSERT INTO instrument_tracking
+       (instrument_id, tracking_state, follower_count, priority, tracking_source, updated_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (instrument_id) DO UPDATE
-       SET tracking_state = EXCLUDED.tracking_state,
-           follower_count = EXCLUDED.follower_count,
-           priority       = EXCLUDED.priority,
-           updated_at     = NOW()`,
+       SET tracking_state  = EXCLUDED.tracking_state,
+           follower_count  = EXCLUDED.follower_count,
+           priority        = EXCLUDED.priority,
+           tracking_source = EXCLUDED.tracking_source,
+           updated_at      = NOW()`,
     // Note: last_ingested_at is NOT included — worker-only column (INV-3).
-    [instrumentId, trackingState, followerCount, priority],
+    [instrumentId, trackingState, followerCount, priority, trackingSource],
+  );
+}
+
+/**
+ * Registers view-only ingestion demand (T-decouple, architecture §D: "tracking... expresses
+ * demand, not market fact"). Called from `GET /instruments/by-symbol/:symbol` the first time a
+ * catalog symbol nobody has starred is viewed: the row is ACTIVE (so the worker's poll set
+ * picks it up) but at the lowest priority, and tagged `tracking_source = 'VIEWED'` so a later
+ * phase can reap instruments that were only ever viewed, never starred.
+ *
+ * Idempotent: does nothing if a tracking row already exists for this instrument (starring
+ * already governs that row via `upsertTrackingFromCount`, which must never be downgraded by a
+ * concurrent view).
+ */
+export async function registerViewDemand(
+  client: Pool | PoolClient,
+  instrumentId: bigint,
+): Promise<void> {
+  await query(
+    client,
+    `INSERT INTO instrument_tracking
+       (instrument_id, tracking_state, follower_count, priority, tracking_source, updated_at)
+     VALUES ($1, 'ACTIVE', 0, 0, 'VIEWED', NOW())
+     ON CONFLICT (instrument_id) DO NOTHING`,
+    [instrumentId],
   );
 }
 

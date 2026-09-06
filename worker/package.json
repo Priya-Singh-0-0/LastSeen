@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node dist/main.js",
-    "dev": "tsx watch src/main.ts",
+    "dev": "tsx watch --env-file=.env src/main.ts",
+    "sync:catalog": "tsx --env-file=.env src/catalog/main.ts",
+    "sync:popular": "tsx --env-file=.env src/popular/main.ts",
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

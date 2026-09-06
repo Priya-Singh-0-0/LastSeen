@@ -10,7 +10,9 @@ import { query } from '../db.js';
 
 export type JobType =
   | 'resolve_instrument'
-  | 'backfill_bars';
+  | 'backfill_bars'
+  | 'ingest_instrument'
+  | 'render_brief';
 
 export interface EnqueueOptions {
   jobType: JobType;

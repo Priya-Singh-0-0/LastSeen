@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseDecimal, toSessionDate } from '@stockwatch/contracts';
-import type { Observation, DailyBar } from '@stockwatch/contracts';
+import type { Observation, DailyBar, AssetRef, MostActive } from '@stockwatch/contracts';
 import type { ProviderAdapter } from './index.js';
 
 
@@ -92,5 +92,41 @@ export class FixtureAdapter implements ProviderAdapter {
         close: parseDecimal(String(r.close)),
         volume: parseDecimal(String(r.volume)),
       }));
+  }
+
+  async fetchAssets(): Promise<AssetRef[]> {
+    const filePath = resolve(this.fixtureDir, 'assets.json');
+    let raws: Array<Record<string, unknown>>;
+    try {
+      raws = JSON.parse(readFileSync(filePath, 'utf8')) as Array<Record<string, unknown>>;
+    } catch {
+      return [];
+    }
+
+    return raws.map((r) => ({
+      symbol: String(r.symbol),
+      name: String(r.name),
+      exchange: r.exchange === undefined || r.exchange === null ? null : String(r.exchange),
+      assetClass: r.assetClass === undefined || r.assetClass === null ? null : String(r.assetClass),
+      status: String(r.status),
+      tradable: r.tradable !== false,
+    }));
+  }
+
+  async fetchMostActives(limit: number): Promise<MostActive[]> {
+    const filePath = resolve(this.fixtureDir, 'most_actives.json');
+    let raws: Array<Record<string, unknown>>;
+    try {
+      raws = JSON.parse(readFileSync(filePath, 'utf8')) as Array<Record<string, unknown>>;
+    } catch {
+      return [];
+    }
+
+    return raws.slice(0, limit).map((r, index) => ({
+      symbol: String(r.symbol),
+      rank: index + 1,
+      tradeCount: Number(r.tradeCount),
+      volume: Number(r.volume),
+    }));
   }
 }

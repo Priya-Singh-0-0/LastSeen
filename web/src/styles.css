@@ -1,976 +1,1613 @@
-/* LastSeen — CoinGecko dark-mode grammar. Dense, data-table-first, quiet chrome. */
+/* ==========================================================================
+   LastSeen — the watch log.
+   This file is the design system. There is no framework and there are no
+   utility classes: hairline rules are the only structural device, and there
+   are no cards anywhere in this product.
+   ========================================================================== */
+
+/* --- Type ---------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'Archivo';
+  src: url('/fonts/archivo-latin.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
+@font-face {
+  font-family: 'Archivo';
+  src: url('/fonts/archivo-latin-ext.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Archivo Narrow';
+  src: url('/fonts/archivo-narrow-latin.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
+@font-face {
+  font-family: 'Archivo Narrow';
+  src: url('/fonts/archivo-narrow-latin-ext.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* --- Tokens -------------------------------------------------------------- */
 
 :root {
-  /* ground — near-black, slightly blue-tinted */
-  --bg: #0d1017;
-  --surface: #161a22;
-  --surface-raised: #1c212b;
-  --border: #232937;
-  --border-strong: #2e3646;
+  /* Ground and ruling. No rule in this product is the sole carrier of any state, value, or
+     grouping — remove every rule and the page still parses. */
+  --ground: #0b0e11;
+  --ground-raised: #12161b;
+  --rule: #262e38;
+  --rule-strong: #3a4550;
 
-  /* text */
-  --text: #f4f6fa;
-  --text-secondary: #a8b0c2;
-  --text-muted: #7b8497;
+  --ink: #e8edf2;
+  --ink-2: #9aa6b2;
+  --ink-3: #808c99;
 
-  /* direction — reserved exclusively for price movement */
-  --up: #00c076;
-  --down: #ff4d4f;
+  /* Axis one — price direction. The only place hue encodes a numeric value. */
+  --green: #16c784;
+  --red: #ff6257;
 
-  /* attention bands — deliberately NOT red/green */
-  --band-urgent: #ff9142;
-  --band-notable: #ffd166;
-  --band-minor: #7d8cb0;
-  --band-quiet: #59616f;
+  /* Axis two — attention band. Off the red/green axis entirely; extent is the real carrier. */
+  --band-urgent: #ffb020;
+  --band-notable: #b8903f;
+  --band-minor: #6b7785;
+  --band-quiet: #5a6673;
 
-  /* trust / freshness */
-  --stale: #b8863b;
-  --unavailable: #6b7280;
+  /* Trust marks use no hue at all — a third colour meaning would be the collision. */
+  --hatch: #3a4550;
 
-  --accent: #4bcc00;
+  --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-narrow: 'Archivo Narrow', 'Archivo', system-ui, sans-serif;
 
-  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Roboto Mono', monospace;
+  --top-rule-h: 64px;
+  --row-h: 76px;
+  --gutter: 32px;
+  --page: 1440px;
 
-  --transition: 140ms ease-out;
+  --step: 8px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --transition: 0ms;
-  }
-  * {
-    transition-duration: 0ms !important;
-    animation-duration: 0ms !important;
-  }
-}
+/* --- Base ---------------------------------------------------------------- */
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
+  margin: 0;
 }
 
 body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-ui);
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font);
   font-size: 14px;
+  line-height: 21px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+p,
+ul,
+ol,
+dl,
+dd {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
 }
 
 button {
-  font-family: inherit;
-}
-
-.mono,
-.tabular {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── shared button/chip primitives ─────────────────────────────────────── */
-
-.button {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  transition: background var(--transition), border-color var(--transition);
-}
-.button:hover {
-  background: var(--surface-raised);
-}
-.button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.button--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0d1017;
-}
-.button--primary:hover {
-  background: #58e000;
-}
-
-.chip {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--surface-raised);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
-.chip--stale {
-  color: var(--stale);
-  border-color: var(--stale);
-}
-.chip--unavailable {
-  color: var(--unavailable);
-  border-color: var(--unavailable);
-}
-
-.band-pill {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 2px 9px;
-  border-radius: 999px;
-}
-.band-pill--urgent {
-  color: var(--band-urgent);
-  background: color-mix(in srgb, var(--band-urgent) 16%, transparent);
-}
-.band-pill--notable {
-  color: var(--band-notable);
-  background: color-mix(in srgb, var(--band-notable) 16%, transparent);
-}
-.band-pill--minor {
-  color: var(--band-minor);
-  background: color-mix(in srgb, var(--band-minor) 16%, transparent);
-}
-.band-pill--quiet {
-  color: var(--band-quiet);
-  background: color-mix(in srgb, var(--band-quiet) 16%, transparent);
-}
-.band-pill--none {
-  color: var(--text-muted);
-}
-
-.monogram {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  flex-shrink: 0;
-  background: var(--surface-raised);
-  color: var(--text-secondary);
-}
-.monogram--urgent {
-  color: var(--band-urgent);
-  background: color-mix(in srgb, var(--band-urgent) 18%, var(--surface-raised));
-}
-.monogram--notable {
-  color: var(--band-notable);
-  background: color-mix(in srgb, var(--band-notable) 18%, var(--surface-raised));
-}
-.monogram--minor {
-  color: var(--band-minor);
-  background: color-mix(in srgb, var(--band-minor) 18%, var(--surface-raised));
-}
-.monogram--quiet,
-.monogram--none {
-  color: var(--text-muted);
-}
-
-/* ── envelope (price / status facts) ───────────────────────────────────── */
-
-.envelope-price {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.envelope-price__value {
-  font-size: 15px;
-  font-weight: 600;
-}
-.envelope-price__currency {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.envelope-price--warming {
-  color: var(--text-muted);
-  font-style: italic;
-  font-family: var(--font-ui);
-}
-
-.envelope-status {
-  display: inline-flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.envelope-badge {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-/* ── sign-in ────────────────────────────────────────────────────────────── */
-
-.sign-in {
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.sign-in__card {
-  width: 100%;
-  max-width: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px;
-}
-.sign-in__wordmark {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-}
-.sign-in__tagline {
-  margin: -8px 0 0;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-.sign-in__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.sign-in__field input {
-  font-family: var(--font-ui);
-  font-size: 14px;
-  padding: 9px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
-  color: var(--text);
-}
-.sign-in__field input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.sign-in__error {
-  margin: 0;
-  color: var(--down);
-  font-size: 13px;
-}
-.sign-in__hint {
-  margin: -8px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.sign-in__toggle {
-  align-self: center;
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: var(--font-ui);
-  cursor: pointer;
-}
-.sign-in__toggle:hover,
-.sign-in__toggle:focus-visible {
-  color: var(--accent);
-}
-
-/* ── error state ────────────────────────────────────────────────────────── */
-
-.error-state {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 24px;
-  color: var(--text-secondary);
-}
-
-/* ── app shell / top bar / summary strip ───────────────────────────────── */
-
-.app-shell {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.top-bar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 20px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.top-bar__wordmark {
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
-.top-bar__watchlist-select {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  background: var(--surface-raised);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 5px 8px;
-}
-.top-bar__spacer {
-  flex: 1;
-}
-.top-bar__last-checked {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.top-bar__sign-out {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 13px;
-  cursor: pointer;
-}
-.top-bar__sign-out:hover {
-  color: var(--text);
-}
-
-.watchlist-name-form {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.watchlist-name-form__input {
-  font-family: var(--font-ui);
-  font-size: 13px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
-  color: var(--text);
-}
-.watchlist-name-form__input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.watchlist-name-form__error {
-  margin: 0;
-  flex-basis: 100%;
-  font-size: 12px;
-  color: var(--down);
-}
-
-.watchlist-delete-confirm {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.watchlist-delete-confirm__error {
-  flex-basis: 100%;
-  font-size: 12px;
-  color: var(--down);
-}
-
-.watchlist-empty-state {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 24px;
-  text-align: center;
-}
-.watchlist-empty-state__message {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.summary-strip {
-  min-height: 72px;
-  display: flex;
-  align-items: center;
-  gap: 40px;
-  padding: 0 20px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-}
-
-.stat-pair {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.stat-pair__label {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.stat-pair__value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 16px;
-  font-weight: 600;
-}
-.stat-pair__value--up {
-  color: var(--up);
-}
-.stat-pair__value--down {
-  color: var(--down);
-}
-
-/* ── the inbox table ────────────────────────────────────────────────────── */
-
-.app-shell__table-wrap {
-  flex: 1;
-  overflow-x: auto;
-}
-
-.inbox__empty {
-  padding: 64px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  color: var(--text-muted);
-}
-
-.inbox-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.inbox-table thead th {
-  position: sticky;
-  top: 56px;
-  z-index: 5;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: 500;
-  padding: 10px 12px;
-  text-align: left;
-  white-space: nowrap;
-}
-.inbox-table__col-rank,
-.inbox-table__col-price,
-.inbox-table__col-change,
-.inbox-table__col-sessions {
-  text-align: right;
-}
-.inbox-table__col-attention,
-.inbox-table__col-unseen {
-  text-align: center;
-}
-
-.inbox-row {
-  min-height: 64px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  transition: background var(--transition);
-}
-.inbox-row:hover {
-  background: var(--surface-raised);
-}
-.inbox-row:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.inbox-row--dimmed {
-  opacity: 0.7;
-}
-.inbox-row--rail-urgent {
-  border-left-color: var(--band-urgent);
-}
-.inbox-row--rail-notable {
-  border-left-color: var(--band-notable);
-}
-.inbox-row--rail-minor {
-  border-left-color: var(--band-minor);
-}
-.inbox-row--rail-quiet {
-  border-left-color: var(--band-quiet);
-}
-.inbox-row--rail-none {
-  border-left-color: transparent;
-}
-
-.inbox-row td {
-  padding: 10px 12px;
-  vertical-align: middle;
-}
-
-.inbox-row__rank {
-  text-align: right;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.inbox-row__instrument {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.inbox-row__instrument-text {
-  display: flex;
-  flex-direction: column;
-}
-.inbox-row__symbol {
-  font-weight: 700;
-}
-.inbox-row__exchange {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.inbox-row__price {
-  text-align: right;
-}
-
-.inbox-row__change {
-  text-align: right;
-}
-.inbox-row__change-value {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-.inbox-row__percentage {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-.is-up .inbox-row__percentage {
-  color: var(--up);
-}
-.is-down .inbox-row__percentage {
-  color: var(--down);
-}
-.inbox-row__absolute {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-muted);
-}
-.inbox-row__cant-compare {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  color: var(--stale);
-  font-weight: 600;
-}
-.inbox-row__cant-compare-reason {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-muted);
-}
-.inbox-row__warming,
-.inbox-row__no-change {
-  color: var(--text-muted);
-}
-
-.inbox-row__sessions {
-  text-align: right;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-}
-
-.inbox-row__attention {
-  text-align: center;
-}
-
-.inbox-row__unseen {
-  text-align: center;
-}
-.inbox-row__unseen-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #0d1017;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.inbox-row__data {
-  white-space: nowrap;
-}
-
-.inbox-row__explanation {
-  color: var(--text-secondary);
-  font-size: 13px;
-  max-width: 360px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.inbox-row__remove-cell {
-  text-align: right;
-  white-space: nowrap;
-}
-.inbox-row__remove-button {
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text-muted);
-  border-radius: 6px;
-  width: 28px;
-  height: 28px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background var(--transition), color var(--transition);
-}
-.inbox-row__remove-button:hover {
-  background: var(--surface-raised);
-  color: var(--down);
-}
-.inbox-row__confirm-remove {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-/* ── add-instrument form ────────────────────────────────────────────────── */
-
-.add-instrument-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
-}
-.add-instrument-form__input {
-  font-family: var(--font-ui);
-  font-size: 14px;
-  padding: 9px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-strong);
-  background: var(--bg);
-  color: var(--text);
-  min-width: 220px;
-}
-.add-instrument-form__input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.add-instrument-form__status {
-  margin: 0;
-  font-size: 13px;
-  flex-basis: 100%;
-}
-.add-instrument-form__status--error {
-  color: var(--down);
-}
-.add-instrument-form__status--added {
-  color: var(--text-secondary);
-}
-.add-instrument-form__dismiss {
-  margin-left: 10px;
-  background: none;
-  border: none;
+  font: inherit;
   color: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-  font-size: inherit;
+  background: none;
+  border: 0;
   padding: 0;
+  cursor: pointer;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: rgb(22 199 132 / 25%);
+}
+
+/* Every column of figures aligns. Never opted out of. */
+.numeral {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 .visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
-  padding: 0;
   margin: -1px;
+  padding: 0;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
 }
 
-/* ── instrument detail ──────────────────────────────────────────────────── */
-
-.instrument-detail {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 24px 24px 96px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+/* The label grammar: Archivo Narrow, caps, tracked. Column heads, bands, chips, footnotes. */
+.col,
+.margin__band,
+.band-pill,
+.status-fact,
+.since__flag,
+.since__footnote,
+.since__label,
+.sheet__label,
+.what__more,
+.reading__key,
+.signal__version,
+.entry-record__meta,
+.field__label,
+.entry__hint,
+.search__no-match,
+.ledger-empty__head,
+.loading-state__label,
+.error-state__message {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  line-height: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.instrument-detail__back {
-  align-self: flex-start;
+/* --- Controls ------------------------------------------------------------ */
+
+/* The accent is a control, never decoration: green appears on operable things, on things
+   pointing at an operable thing, and on the price-change axis. Nowhere else. */
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--step);
+  min-height: 40px;
+  padding: 0 20px;
+  background: var(--green);
+  color: var(--ground);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: 2px;
+}
+
+.action:hover {
+  filter: brightness(1.08);
+}
+
+.action:disabled {
+  background: var(--rule-strong);
+  color: var(--ink-3);
+  cursor: default;
+  filter: none;
+}
+
+.action--quiet {
   background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 13px;
-  cursor: pointer;
-  padding: 0;
-}
-.instrument-detail__back:hover {
-  color: var(--text);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
 }
 
-.instrument-detail__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
+.action--quiet:hover {
+  border-color: var(--ink-3);
+  filter: none;
 }
-.instrument-detail__identity {
+
+/* The one committed action in the product: the countersign. */
+.action--commit {
+  width: 100%;
+  min-height: 56px;
+  font-size: 15px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+/* The ruling is the field. No boxes. */
+.field {
+  display: block;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.field__label {
+  display: block;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+
+.field__input {
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.field__input:focus {
+  outline: none;
+}
+
+.field:focus-within {
+  border-bottom-color: var(--green);
+}
+
+/* --- Top rule ------------------------------------------------------------ */
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.top-rule {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 240px minmax(320px, 1fr) 240px;
+  align-items: center;
+  height: var(--top-rule-h);
+  padding: 0 var(--gutter);
+  background: var(--ground-raised);
+  border-bottom: 1px solid var(--rule);
+}
+
+.top-rule--bare {
+  grid-template-columns: 1fr;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* The standing mark: the log's own device, and the only mark in the chrome. Sized against the
+   top rule's own rhythm rather than an invented value — smaller than the 32px account glyph
+   button, larger than a favicon, so it reads as the wordmark's mark and not a stray icon. */
+.wordmark__mark {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.top-rule__search {
+  justify-self: stretch;
+  position: relative;
+}
+
+.account {
+  position: relative;
+  justify-self: end;
+}
+
+.account__button {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--ink-2);
+  border-radius: 50%;
 }
-.instrument-detail__symbol {
-  margin: 0;
-  font-size: 28px;
+
+.account__button:hover,
+.account__button[aria-expanded='true'] {
+  color: var(--ink);
+  background: var(--ground);
 }
-.instrument-detail__exchange {
-  color: var(--text-muted);
-  font-size: 13px;
+
+.account__menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 160px;
+  padding: 4px 0;
+  background: var(--ground-raised);
+  border: 1px solid var(--rule);
 }
-.instrument-detail__price-block {
+
+.account__item {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  text-align: left;
+  color: var(--ink-2);
+}
+
+.account__item:hover {
+  color: var(--ink);
+  background: var(--ground);
+}
+
+/* --- Search -------------------------------------------------------------- */
+
+.search {
+  position: relative;
+}
+
+.search__line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.search__glyph {
+  display: flex;
+  color: var(--ink-3);
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 14px;
+}
+
+.search__input::placeholder {
+  color: var(--ink-3);
+}
+
+.search__input:focus {
+  outline: none;
+}
+
+.search:focus-within .search__line {
+  border-bottom-color: var(--green);
+}
+
+/* The list expands downward on the same ground, in the ledger's row grammar, so the two read
+   as one object. */
+.search__results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  max-height: 380px;
+  overflow-y: auto;
+  background: var(--ground-raised);
+  border: 1px solid var(--rule);
+}
+
+.search__result {
+  display: grid;
+  grid-template-columns: 24px 72px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+
+.search__result:last-child {
+  border-bottom: 0;
+}
+
+.search__result.is-active {
+  background: var(--ground);
+}
+
+/* Same fill-versus-outline grammar as the ledger star. It cannot mean two things. */
+.search__star {
+  display: flex;
+  color: var(--ink-3);
+}
+
+.search__star.is-watched {
+  color: var(--band-urgent);
+}
+
+.search__result-symbol {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.search__result-name {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search__result-exchange {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.search__results--empty {
+  padding: 14px;
+}
+
+.search__no-match {
+  color: var(--ink);
+}
+
+.search__no-match-body {
+  margin-top: 6px;
+  color: var(--ink-2);
+}
+
+.search__status {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--ground-raised);
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+
+.search__status--error {
+  border-color: var(--rule-strong);
+  color: var(--ink);
+}
+
+.search__dismiss {
+  margin-left: auto;
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.search__dismiss:hover {
+  color: var(--ink);
+}
+
+/* --- Sign in ------------------------------------------------------------- */
+
+.sign-in {
+  min-height: 100vh;
+}
+
+.sign-in__body {
+  display: flex;
+  justify-content: center;
+  padding: 96px var(--gutter);
+}
+
+.entry {
+  width: 380px;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  gap: 24px;
 }
-.instrument-detail__price {
-  font-size: 20px;
+
+/* ── Price chart ──────────────────────────────────────────────────────────────
+   The line is the only non-neutral mark here, and it reuses --green/--red rather
+   than introducing a chart palette. Fills are the same hues at low alpha, so the
+   chart carries no colour the band system doesn't already own. */
+.sheet__chart {
+  padding: 20px 0;
+  border-top: 1px solid var(--rule);
 }
-.instrument-detail__price .envelope-price__value {
-  font-size: 28px;
+
+/* Anchors the readout and owns the pointer surface. `touch-action: none` keeps a
+   drag along the chart reading prices instead of scrolling the sheet. */
+.chart__plot {
+  position: relative;
+  touch-action: none;
+  cursor: crosshair;
 }
-.instrument-detail__status-chips {
+
+.chart__plot:focus {
+  outline: none;
+}
+
+.chart__plot:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 4px;
+}
+
+.chart__svg {
+  display: block;
+  width: 100%;
+  height: 180px;
+  overflow: visible;
+}
+
+/* The crosshair is scaffolding, not data: thin, neutral, and never coloured by
+   direction, so it cannot be mistaken for the price line. */
+.chart__crosshair {
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart__dot {
+  fill: var(--ground);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart__svg--up .chart__dot {
+  stroke: var(--green);
+}
+
+.chart__svg--down .chart__dot {
+  stroke: var(--red);
+}
+
+/* Rides the crosshair, centred on it, and tucks inside the plot at either edge so
+   the first and last bars stay readable. */
+.chart__readout {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
   display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--ground-raised);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.chart__readout[data-edge='start'] {
+  transform: translateX(0);
+}
+
+.chart__readout[data-edge='end'] {
+  transform: translateX(-100%);
+}
+
+.chart__readout-price {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.chart__readout-date {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.chart__line {
+  fill: none;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart__area {
+  stroke: none;
+}
+
+.chart__svg--up .chart__line {
+  stroke: var(--green);
+}
+
+.chart__svg--up .chart__area {
+  fill: color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.chart__svg--down .chart__line {
+  stroke: var(--red);
+}
+
+.chart__svg--down .chart__area {
+  fill: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
+.chart__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0 0;
+  color: var(--ink-3);
+}
+
+.chart__meta-item {
+  display: flex;
+  align-items: baseline;
   gap: 6px;
 }
 
-.detail-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px;
-}
-.detail-card__title {
-  margin: 0 0 16px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-.detail-card__stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px;
-}
-.detail-card__adjustment-labels {
-  margin: 16px 0 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.instrument-detail__suppressed {
-  border: 1px solid var(--stale);
-  border-radius: 8px;
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--stale);
-}
-
-.instrument-detail__section-title {
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.instrument-detail__action-bar {
-  position: sticky;
-  bottom: 0;
-  padding: 16px 0;
-  background: linear-gradient(to top, var(--bg) 60%, transparent);
-}
-
-/* ── evidence panel ─────────────────────────────────────────────────────── */
-
-.evidence-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.evidence-panel__record {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 16px;
-}
-.evidence-panel__record-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.evidence-panel__score {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  font-size: 12px;
-}
-.evidence-panel__published-at {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
+.chart__meta-label {
+  font-family: var(--font-narrow);
   font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.evidence-panel__explanation {
-  color: var(--text);
-  font-size: 14px;
-  margin: 8px 0 0;
+
+.chart__meta-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
 }
-.evidence-panel__disclosure {
-  margin-top: 10px;
+
+.chart__meta-sep {
+  width: 1px;
+  height: 9px;
+  background: var(--rule-strong);
 }
-.evidence-panel__disclosure summary {
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--text-muted);
+
+.chart__empty {
+  color: var(--ink-3);
+  font-size: 13px;
 }
-.evidence-panel__signals {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+
+.entry__mark {
+  align-self: center;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
 }
-.evidence-panel__signal {
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-}
-.evidence-panel__signal-header {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.evidence-panel__signal-type {
-  font-weight: 700;
-}
-.evidence-panel__signal-version,
-.evidence-panel__signal-timestamp {
-  color: var(--text-muted);
-}
-.evidence-panel__evidence-list {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 3px 16px;
-  margin: 8px 0 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-.evidence-panel__evidence-list dt {
-  color: var(--text-muted);
-}
-.evidence-panel__empty {
-  color: var(--text-muted);
-  padding: 24px;
+
+.entry__tagline {
+  color: var(--ink-2);
+  font-size: 15px;
   text-align: center;
 }
 
-/* ── responsive ─────────────────────────────────────────────────────────── */
-
-@media (max-width: 1279px) {
-  .inbox-table__col-sessions,
-  .inbox-table__col-rank,
-  .inbox-row__sessions,
-  .inbox-row__rank {
-    display: none;
-  }
+.entry__hint,
+.entry__error {
+  margin-top: -12px;
 }
 
-@media (max-width: 767px) {
-  .inbox-table thead {
-    display: none;
-  }
-  .inbox-table,
-  .inbox-table tbody {
-    display: block;
-  }
-  .inbox-row {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 12px 14px;
-  }
-  .inbox-row td {
-    display: block;
-    padding: 0;
-  }
-  .inbox-row__rank {
-    display: none;
-  }
-  .inbox-row__instrument,
-  .inbox-row__price {
-    display: flex;
-  }
-  .inbox-row__instrument {
-    justify-content: space-between;
-  }
+.entry__hint {
+  color: var(--ink-3);
+}
 
-  .instrument-detail {
-    padding: 16px 16px 96px;
-  }
-  .instrument-detail__header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .instrument-detail__price-block {
-    align-items: flex-start;
+.entry__error {
+  font-family: var(--font-narrow);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  color: var(--red);
+}
+
+.entry__toggle {
+  align-self: flex-start;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.entry__toggle:hover {
+  color: var(--ink);
+}
+
+/* --- The ledger ---------------------------------------------------------- */
+
+.app-shell__main {
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--gutter) 96px;
+}
+
+.ledger {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.col {
+  color: var(--ink-3);
+  text-align: left;
+  font-weight: 600;
+  padding: 18px 12px 10px;
+  background: var(--ground);
+  /* Sticks *below* the top rule, in the same scroll container, so row one is never underneath
+     it — the overlap defect was an offset bug, not something to paper over with a margin. */
+  position: sticky;
+  top: var(--top-rule-h);
+  z-index: 20;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.col--watch {
+  width: 120px;
+  padding-left: 0;
+}
+
+.col--stock {
+  width: 200px;
+}
+
+.col--since {
+  width: 260px;
+}
+
+.col--price {
+  width: 190px;
+}
+
+.col--changes {
+  width: auto;
+}
+
+.ledger-row {
+  height: var(--row-h);
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.ledger-row:hover {
+  background: var(--ground-raised);
+}
+
+/* Focus expands, neighbours recede. */
+.ledger-row:focus-visible {
+  background: var(--ground-raised);
+  outline: none;
+}
+
+.ledger tbody:focus-within .ledger-row:not(:focus-visible) .stock__symbol,
+.ledger tbody:focus-within .ledger-row:not(:focus-visible) .what__text {
+  color: var(--ink-2);
+}
+
+.cell {
+  padding: 12px;
+  vertical-align: middle;
+}
+
+/* --- The margin: rail, band, flag, star ---------------------------------- */
+
+.cell--margin {
+  position: relative;
+  padding-left: 0;
+}
+
+.margin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+}
+
+/* Extent carries the ramp; luminance supports it; hue is the weakest carrier. */
+.rail {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  border-radius: 1px;
+}
+
+/* The rail's hue is reassigned to --ink (not --band-urgent) so it never collides with the
+   star, which now carries the product's one deliberate yellow (defect 10, DESIGN.md §3).
+   Extent (full row height) and the caps label remain the rail's real carriers — hue was
+   already documented as the weakest one, so dropping it here costs the ramp nothing. */
+.rail--urgent {
+  top: 0;
+  bottom: 0;
+  background: var(--ink);
+}
+
+.rail--notable {
+  top: 16%;
+  bottom: 16%;
+  background: var(--band-notable);
+}
+
+.rail--minor {
+  top: 33%;
+  bottom: 33%;
+  background: var(--band-minor);
+}
+
+.rail--quiet {
+  top: 50%;
+  width: 1px;
+  height: 8px;
+  margin-top: -4px;
+  background: var(--band-quiet);
+}
+
+.rail--none {
+  display: none;
+}
+
+.margin__stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 56px;
+}
+
+.margin__band--urgent {
+  color: var(--band-urgent);
+}
+
+.margin__band--notable {
+  color: var(--band-notable);
+}
+
+.margin__band--minor {
+  color: var(--band-minor);
+}
+
+.margin__band--quiet {
+  color: var(--band-quiet);
+}
+
+/* Open entries, counted in the margin. A zero renders no flag at all: quiet, not an error. */
+.margin__flag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ground);
+  background: var(--ink);
+  border-radius: 2px;
+}
+
+/* The one deliberate hue outside the two price/band axes (defect 10, DESIGN.md §3) — reuses
+   --band-urgent rather than a new hex, so the rail above was moved off amber to stay clear of it. */
+.star {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  color: var(--band-urgent);
+  border-radius: 50%;
+}
+
+/* Every ledger row is watched by definition, so hover cannot be "filled, but more so" — it
+   previews the outcome, which is removal. The pad supplies the delta and marks the hit area. */
+.star:hover,
+.star:focus-visible {
+  background: var(--ground);
+}
+
+.star:hover :where(svg),
+.star:focus-visible :where(svg) {
+  fill: none;
+}
+
+/* --- Stock --------------------------------------------------------------- */
+
+.stock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stock__symbol {
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.stock__name {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock__exchange {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* --- Since you last checked: the dominant column ------------------------- */
+
+.since {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.since__figure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 500;
+}
+
+.since--sheet .since__figure {
+  font-size: 34px;
+  line-height: 40px;
+}
+
+.since__figure.is-up,
+.since__absolute.is-up {
+  color: var(--green);
+}
+
+.since__figure.is-down,
+.since__absolute.is-down {
+  color: var(--red);
+}
+
+.since__absolute {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+/* Drawn as a shape rather than a character: survives greyscale, needs no glyph coverage. */
+.direction-mark {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+}
+
+.direction-mark.is-up {
+  border-bottom: 8px solid var(--green);
+}
+
+.direction-mark.is-down {
+  border-top: 8px solid var(--red);
+}
+
+.since__flag {
+  color: var(--ink-3);
+}
+
+.since--suppressed .since__flag {
+  color: var(--ink);
+}
+
+.since__dagger {
+  margin-right: 6px;
+  color: var(--band-urgent);
+}
+
+.since__note {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+
+.since__footnotes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.since__footnote {
+  color: var(--ink-3);
+}
+
+.since__footnote--caution {
+  color: var(--band-notable);
+}
+
+.since__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.since__label {
+  padding: 2px 6px;
+  color: var(--ink-3);
+  border: 1px solid var(--rule);
+}
+
+/* --- Price and its three separate status marks --------------------------- */
+
+.envelope-price {
+  display: block;
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.envelope-price__currency {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.envelope-price--warming,
+.envelope-price--none {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.envelope-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Market status, value kind and data freshness are three orthogonal facts, rendered as three
+   marks and never concatenated into one chip. */
+.envelope-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.status-fact {
+  color: var(--ink-3);
+}
+
+.status-fact + .status-fact::before {
+  content: '';
+  display: inline-block;
+  width: 1px;
+  height: 9px;
+  margin-right: 10px;
+  vertical-align: -1px;
+  background: var(--rule-strong);
+}
+
+.status-fact--delayed,
+.status-fact--stale,
+.status-fact--unavailable {
+  color: var(--ink-2);
+}
+
+/* Dimmed and labelled — never filtered, never hidden, never re-sorted. The hatch is redundant
+   texture behind a cell that is also labelled and whose numerals are already dropped. */
+.ledger-row.is-dimmed .cell--price {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 3px,
+    var(--hatch) 3px,
+    var(--hatch) 4px
+  );
+}
+
+.ledger-row.is-dimmed .envelope-price,
+.ledger-row.is-dimmed .stock__symbol {
+  color: var(--ink-2);
+}
+
+.ledger-row.is-removing {
+  color: var(--ink-2);
+}
+
+.ledger-row.is-removing .stock__symbol,
+.ledger-row.is-removing .since__figure {
+  color: var(--ink-2);
+}
+
+/* --- Changes -------------------------------------------------------- */
+
+.cell--changes {
+  position: relative;
+}
+
+.what__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--ink);
+}
+
+/* Overflow is handled by destination, not by tooltip: the full text lives on the sheet. */
+.what__more {
+  display: none;
+  color: var(--ink-3);
+}
+
+.ledger-row:hover .what__more,
+.ledger-row:focus-visible .what__more {
+  display: block;
+  margin-top: 4px;
+}
+
+/* --- Empty, loading, error ----------------------------------------------- */
+
+.ledger-empty {
+  position: relative;
+  padding: 64px 0 96px;
+  border-top: 1px solid var(--rule-strong);
+}
+
+.ledger-empty__head {
+  color: var(--ink);
+}
+
+.ledger-empty__body {
+  margin-top: 8px;
+  color: var(--ink-2);
+}
+
+/* A thin leader pointing back up at the search line — a control's accent, not decoration. */
+.ledger-empty__leader {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--green), transparent);
+}
+
+/* The empty-watchlist suggestion board (defect 8). Same row grammar as the search dropdown
+   (`.search__result`) — grid columns for star, symbol, name, exchange — so a suggestion here
+   reads as the same kind of object a search result is, not a new one. */
+.popular-board {
+  max-width: 640px;
+  margin: 40px auto 0;
+}
+
+.popular-board__head {
+  margin-bottom: 4px;
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.popular-board__list {
+  border-top: 1px solid var(--rule);
+}
+
+.popular-board__row {
+  display: grid;
+  grid-template-columns: 24px 72px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+
+.popular-board__star {
+  display: flex;
+  color: var(--ink-3);
+}
+
+.popular-board__star.is-watched {
+  color: var(--band-urgent);
+}
+
+.popular-board__symbol {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.popular-board__name {
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popular-board__exchange {
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ledger--placeholder .ledger-row {
+  cursor: default;
+}
+
+.placeholder-bar {
+  display: block;
+  height: 10px;
+  background: var(--rule-strong);
+}
+
+.placeholder-bar--symbol {
+  width: 64px;
+}
+
+.placeholder-bar--name {
+  width: 120px;
+  height: 8px;
+  margin-top: 8px;
+  background: var(--rule);
+}
+
+.placeholder-bar--figure {
+  width: 96px;
+  height: 14px;
+}
+
+.placeholder-bar--price {
+  width: 72px;
+}
+
+.loading-state,
+.error-state {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.loading-state__pulse {
+  width: 3px;
+  height: 14px;
+  background: var(--rule-strong);
+}
+
+.loading-state__label,
+.error-state__message {
+  color: var(--ink-3);
+}
+
+.error-state__message {
+  color: var(--ink);
+}
+
+.error-state .action {
+  margin-left: auto;
+}
+
+/* --- The sheet ----------------------------------------------------------- */
+
+.sheet {
+  padding-top: 24px;
+}
+
+.sheet__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+}
+
+.sheet__back:hover {
+  color: var(--ink);
+}
+
+.sheet__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 24px 0 20px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+/* Star and symbol are one group so they sit adjacent — a bare 3-child `space-between` on
+   `.sheet__head` spread the star to the left edge and centred the symbol between it and the
+   price, instead of the two reading as one unit. */
+.sheet__title {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+/* Same starring mechanic as the ledger and search, reachable from a stock that isn't watched
+   yet — the only way an unstarred detail sheet's stock enters the watchlist. Sized up from the
+   ledger's 17px glyph to sit next to the 32px symbol without reading as an afterthought. */
+.sheet__star {
+  width: 36px;
+  height: 36px;
+  margin-left: 0;
+}
+
+.sheet__symbol {
+  font-size: 32px;
+  line-height: 36px;
+  font-weight: 600;
+}
+
+.sheet__name {
+  margin-top: 4px;
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.sheet__exchange {
+  margin-top: 2px;
+  font-family: var(--font-narrow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sheet__price {
+  text-align: right;
+}
+
+.sheet__price .envelope-price {
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.sheet__price .envelope-status {
+  justify-content: flex-end;
+}
+
+.sheet__label {
+  color: var(--ink-3);
+  margin-bottom: 12px;
+}
+
+.sheet__brief {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sheet__brief-text {
+  color: var(--ink-2);
+  max-width: 68ch;
+  line-height: 1.6;
+}
+
+.sheet__since {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sheet__suppressed {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sheet__suppressed-note {
+  color: var(--ink);
+}
+
+.sheet__entries {
+  padding: 24px 0 32px;
+}
+
+/* --- Log entries --------------------------------------------------------- */
+
+.entries {
+  display: flex;
+  flex-direction: column;
+}
+
+.entries__empty {
+  color: var(--ink-3);
+  padding: 8px 0;
+}
+
+.entry-record {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 24px;
+  padding: 20px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.entry-record__margin {
+  position: relative;
+  padding-left: 14px;
+}
+
+.entry-record__margin .rail {
+  top: 2px;
+  bottom: 2px;
+}
+
+.entry-record__margin .rail--quiet {
+  top: 4px;
+  bottom: auto;
+}
+
+.entry-record__seq {
+  display: block;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.band-pill {
+  display: block;
+  margin-top: 6px;
+  color: var(--band-minor);
+}
+
+.band-pill--urgent {
+  color: var(--band-urgent);
+}
+
+.band-pill--notable {
+  color: var(--band-notable);
+}
+
+.band-pill--quiet {
+  color: var(--band-quiet);
+}
+
+.band-pill--none {
+  color: var(--ink-3);
+}
+
+.entry-record__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-3);
+}
+
+.entry-record__meta-sep {
+  width: 1px;
+  height: 9px;
+  background: var(--rule-strong);
+}
+
+.entry-record__explanation {
+  margin-top: 8px;
+  color: var(--ink);
+}
+
+.signals {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.signal {
+  padding-left: 16px;
+  border-left: 1px solid var(--rule);
+}
+
+.signal__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.signal__type {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.signal__version,
+.signal__timestamp {
+  color: var(--ink-3);
+}
+
+.signal__timestamp {
+  font-size: 12px;
+}
+
+/* Evidence as readings, not prose: keys in the label face, values in tabular figures. */
+.readings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 24px;
+  margin-top: 10px;
+}
+
+.reading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.reading__key {
+  color: var(--ink-3);
+}
+
+.reading__value {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.signal__dedupe {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.countersign {
+  position: sticky;
+  bottom: 0;
+  padding: 16px 0 24px;
+  background: linear-gradient(to bottom, transparent, var(--ground) 24px);
+}
+
+/* Sits where the button would, without pretending to be one: quiet, not centred
+   on a 56px control, no border. */
+.countersign__empty {
+  margin: 0;
+  padding: 8px 0;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+/* --- Motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

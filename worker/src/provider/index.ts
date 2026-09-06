@@ -1,4 +1,4 @@
-import type { Observation } from '@stockwatch/contracts';
+import type { MostActive, Observation } from '@stockwatch/contracts';
 
 /**
  * ProviderAdapter — the boundary between provider-specific code and the rest of the worker (T14).
@@ -24,4 +24,18 @@ export interface ProviderAdapter {
     from: string,
     to: string,
   ): Promise<import('@stockwatch/contracts').DailyBar[]>;
+
+  /**
+   * Fetch the provider's full tradable-asset master for US equities.
+   * Reference data, not market data: one call returns every listed symbol, so this
+   * scales with the market's size, never with users or watchlists.
+   */
+  fetchAssets(): Promise<import('@stockwatch/contracts').AssetRef[]>;
+
+  /**
+   * Fetch the provider's screener "most actives" list, ranked by trade volume
+   * (defect 8). Reference data — one call covers the whole board, no per-user or
+   * per-watchlist fan-out.
+   */
+  fetchMostActives(limit: number): Promise<MostActive[]>;
 }

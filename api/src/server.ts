@@ -5,6 +5,8 @@ import { getPool } from './db.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerWatchlistRoutes } from './watchlists/routes.js';
 import { registerInstrumentRoutes } from './instruments/routes.js';
+import { registerSearchRoutes } from './instruments/search.js';
+import { registerPopularRoutes } from './instruments/popular.js';
 import { registerCheckpointRoutes } from './checkpoints/routes.js';
 import { registerInboxRoutes } from './inbox/routes.js';
 import type { Pool } from './db.js';
@@ -22,6 +24,8 @@ export async function buildApp(pool: Pool, ackTokenSecret: string) {
 
   await registerAuthRoutes(app, pool);
   await registerWatchlistRoutes(app, pool);
+  await registerSearchRoutes(app, pool);
+  await registerPopularRoutes(app, pool);
   await registerInstrumentRoutes(app, pool, ackTokenSecret);
   await registerCheckpointRoutes(app, pool, ackTokenSecret);
   await registerInboxRoutes(app, pool);
