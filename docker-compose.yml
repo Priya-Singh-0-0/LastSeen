@@ -6,7 +6,10 @@ services:
       POSTGRES_PASSWORD: stockwatch
       POSTGRES_DB: stockwatch
     ports:
-      - "5432:5432"
+      # Override if 5432 is already taken on this machine:
+      #   POSTGRES_PORT=5433 docker compose up -d
+      # Then use that port in every DATABASE_URL below.
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

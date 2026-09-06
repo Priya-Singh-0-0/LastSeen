@@ -13,8 +13,11 @@ A market watchlist that answers *"what has meaningfully changed in the instrumen
   docker compose up -d          # creates db `stockwatch`, user/password `stockwatch`
   ```
 
-  If you already run Postgres natively on `:5432`, skip this and create the database yourself;
-  nothing else in the project needs Docker.
+  If `:5432` is already taken on your machine, pick another host port —
+  `POSTGRES_PORT=5433 docker compose up -d` — and use it in every `DATABASE_URL` below.
+
+  If you already run Postgres natively, skip Docker entirely and create the `stockwatch`
+  database yourself; nothing else in the project needs Docker.
 
 ## Quick start
 
@@ -30,14 +33,17 @@ DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch npm run 
 # NOT idempotent — run once, against a freshly migrated database.
 DATABASE_URL=postgres://stockwatch:stockwatch@localhost:5432/stockwatch npm run seed -w api
 
-# Env files. 0002_roles.sql gives each role a password equal to its name;
-# the examples ship a "password" placeholder.
 cp api/.env.example api/.env
 cp worker/.env.example worker/.env
-sed -i 's/stockwatch_api:password/stockwatch_api:stockwatch_api/' api/.env
-sed -i 's/stockwatch_worker:password/stockwatch_worker:stockwatch_worker/' worker/.env
-# Then replace the two change-me secrets in api/.env (32+ chars each).
 ```
+
+Then edit those two files by hand:
+
+- `api/.env` — in `DATABASE_URL`, replace the `password` placeholder with `stockwatch_api`
+  (`0002_roles.sql` gives each role a password equal to its name). Replace both `change-me`
+  secrets with 32+ character values.
+- `worker/.env` — same substitution, with `stockwatch_worker`. Alpaca and Gemini keys are
+  optional; without them the demo seed still works and briefs fall back to templates.
 
 Three processes, three terminals:
 
